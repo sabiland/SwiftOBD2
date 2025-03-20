@@ -24,16 +24,13 @@ struct MockECUSettings {
 
 class MOCKComm: CommProtocol {
     
-    // SABI TWEAK
     func reset() {}
     
-    // SABI TWEAK
     let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? IAPViewController.sabilandAppBundleId, category: "MOCKComm")
 
     @Published var connectionState: ConnectionState = .disconnected
     var connectionStatePublisher: Published<ConnectionState>.Publisher { $connectionState }
     
-    // SABI TWEAK
     weak var obdDelegate: OBDServiceDelegate?
     
     //var obdDelegate: OBDServiceDelegate?

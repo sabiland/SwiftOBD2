@@ -174,7 +174,11 @@ class WifiManager: CommProtocol {
         timeoutTask = Task.detached(priority: .userInitiated) { [weak self] in
             do {
                 try await Task.sleep(
-                    nanoseconds: UInt64(timeout))
+                    nanoseconds: UInt64(
+                        timeout
+                            * Double(
+                                OBDService.oilerObdSetting.oneSecondNanoseconds)
+                    ))
             } catch {
                 return
             }
@@ -226,7 +230,13 @@ class WifiManager: CommProtocol {
                     )
                     Task.detached { [weak self] in
                         try? await Task.sleep(
-                            nanoseconds: UInt64(timeout))
+                            nanoseconds: UInt64(
+                                (timeout
+                                    * OBDService.oilerObdSetting
+                                    .timeoutMultiplyFactorStateWaitingPreparing)
+                                    * Double(
+                                        OBDService.oilerObdSetting
+                                            .oneSecondNanoseconds)))
                         guard let self = self else { return }
                         if case .waiting = self.tcp?.state {
                             self.logger.warning(
@@ -240,7 +250,13 @@ class WifiManager: CommProtocol {
                     self.logger.info("Connection => .preparing")
                     Task.detached { [weak self] in
                         try? await Task.sleep(
-                            nanoseconds: UInt64(timeout))
+                            nanoseconds: UInt64(
+                                (timeout
+                                    * OBDService.oilerObdSetting
+                                    .timeoutMultiplyFactorStateWaitingPreparing)
+                                    * Double(
+                                        OBDService.oilerObdSetting
+                                            .oneSecondNanoseconds)))
                         guard let self = self, self.tcp?.state == .preparing
                         else { return }
                         self.logger.warning(
@@ -393,7 +409,10 @@ class WifiManager: CommProtocol {
 
         let timer = DispatchSource.makeTimerSource(
             queue: DispatchQueue.global(qos: .userInitiated))
-        timer.schedule(deadline: .now() + timeout)  // Ensure it schedules
+        timer.schedule(
+            deadline: .now()
+                + (timeout
+                    * OBDService.oilerObdSetting.timeoutMultiplyFactorWatchdog))  // Ensure it schedules
         timer.setEventHandler { [weak self] in
             guard let self = self else { return }
             self.logger.warning(

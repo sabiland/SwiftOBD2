@@ -46,7 +46,6 @@ public class ConfigurationService {
 ///   - Providing information about the vehicle.
 ///   - Managing the connection state.
 public class OBDService: ObservableObject, OBDServiceDelegate {
-    // SABI TWEAK
     static var oilerObdSetting: OneObdSetting!
 
     @Published public private(set) var connectionState: ConnectionState =
@@ -61,7 +60,6 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         }
     }
 
-    // SABI TWEAK
     deinit {
         Helper.sabipr("OBDService deinit")
     }
@@ -79,7 +77,6 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     public init(connectionType: ConnectionType = .bluetooth) {
         self.connectionType = connectionType
 
-        // SABI TWEAK
         switch connectionType {
         case .bluetooth:
             let bleManager = BLEManager()
@@ -133,13 +130,11 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         preferedProtocol: PROTOCOL? = nil, timeout: TimeInterval = 7
     ) async throws -> OBDInfo {
         do {
-            // SABI TWEAK
             await Obd2EngineViewController.makeGenericObd2DebugMessage(
                 m: "Before connectToAdapter")
 
             try await elm327.connectToAdapter(timeout: timeout)
 
-            // SABI TWEAK
             await Obd2EngineViewController.makeGenericObd2DebugMessage(
                 m: "After connectToAdapter")
             await Obd2EngineViewController.makeGenericObd2DebugMessage(
@@ -148,7 +143,6 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
             try await elm327.adapterInitialization(
                 preferredProtocol: preferedProtocol)
 
-            // SABI TWEAK
             await Obd2EngineViewController.makeGenericObd2DebugMessage(
                 m: "After adapterInitialization")
             await Obd2EngineViewController.makeGenericObd2DebugMessage(
@@ -156,7 +150,6 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
 
             let obdInfo = try await initializeVehicle(preferedProtocol)
 
-            // SABI TWEAK
             await Obd2EngineViewController.makeGenericObd2DebugMessage(
                 m: "After initializeVehicle")
 

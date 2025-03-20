@@ -27,7 +27,6 @@ public enum ConnectionState {
 
 class BLEManager: NSObject, CommProtocol {
 
-    // SABI TWEAK
     func reset() {}
 
     private let peripheralSubject = PassthroughSubject<CBPeripheral, Never>()
@@ -42,7 +41,6 @@ class BLEManager: NSObject, CommProtocol {
         CBUUID(string: "18F0"),  // e.g. VGate iCar Pro
     ]
 
-    // SABI TWEAK
     let logger = Logger(
         subsystem: Bundle.main.bundleIdentifier
             ?? IAPViewController.sabilandAppBundleId, category: "BLEManager")

@@ -75,7 +75,6 @@ class ELM327 {
         }
     }
 
-    // SABI TWEAK
     deinit {
         Helper.sabipr("ELM327 deinit")
     }
@@ -184,7 +183,6 @@ class ELM327 {
 
         _ = try await okResponse("ATSP0")
 
-        // SABI TWEAK
         let delay: UInt64 = UInt64(
             OBDService.oilerObdSetting
                 .delayNanosecondsTimeoutDetectProtocolAutomatically)
@@ -247,7 +245,6 @@ class ELM327 {
         // Now send the 0100 command and check for a valid response
         let response = try? await sendCommand("0100", retries: 3)
 
-        // SABI TWEAK
         if let response = response,
             response.contains(where: {
                 $0.range(of: #"41\s*00"#, options: .regularExpression) != nil
@@ -289,7 +286,6 @@ class ELM327 {
     {
         logger.info("Initializing ELM327 adapter...")
 
-        // SABI TWEAK
         let delay: UInt64 = UInt64(
             OBDService.oilerObdSetting
                 .delayNanosecondsTimeoutAdapterInitialization)
@@ -351,13 +347,11 @@ class ELM327 {
     func stopConnection() {
         comm.disconnectPeripheral()
         connectionState = .disconnected
-        // SABI TWEAK
         comm.reset()
     }
 
     // MARK: - Message Sending
 
-    // SABI TWEAK
     func sendCommand(_ message: String, retries: Int = 2) async throws
         -> [String]
     {
@@ -367,7 +361,6 @@ class ELM327 {
 
     private func okResponse(_ message: String) async throws -> [String] {
         let response = try await sendCommand(message)
-        // SABI TWEAK
         if response.containsIgnoringCase("OK") {
             return response
         } else {
