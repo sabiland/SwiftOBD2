@@ -70,19 +70,40 @@ class WifiManager: CommProtocol {
             name: UIApplication.didBecomeActiveNotification,
             object: nil
         )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(handleWillResignActive),
+            name: UIApplication.willResignActiveNotification,
+            object: nil
+        )
     }
 
     // MARK: - App Lifecycle
 
     @objc private func handleDidEnterBackground() {
         appIsInBackground = true
-        logger.warning("App entered background, cancelling connection.")
-        cancelConnection(with: .backgroundCancelled)
+        logger.warning("App entered background.")
+
+        if isConnecting {
+            logger.warning("Connection in progress, cancelling connection.")
+            cancelConnection(with: .backgroundCancelled)
+        }
     }
 
     @objc private func handleDidBecomeActive() {
         appIsInBackground = false
         logger.info("App became active.")
+    }
+
+    @objc private func handleWillResignActive() {
+        // Pause the ongoing connection when the app goes inactive
+        logger.warning("App will resign active. Pausing connection.")
+
+        // Optionally suspend the connection or take any necessary actions
+        if isConnecting {
+            // Example: suspend the connection or pause the communication process
+            cancelConnection(with: .backgroundCancelled)  // Suspend connection or cancel
+        }
     }
 
     // MARK: - Connection Lifecycle
