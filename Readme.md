@@ -4,6 +4,60 @@
 
 ------------
 
+NOTE: This is my fork/implementation. I use 2 global static objets for specific (bluetooth or wifi) configuration.
+
+```
+final class OneObdSetting: Codable {
+  let name: String
+  var delayNanosecondsTimeoutAdapterInitialization: Int64
+  var delayNanosecondsWifiRetryCommand: Int64
+  var delayNanosecondsTimeoutDetectProtocolAutomatically: Int64
+  var wifiIp: String
+  var wifiPort: Int
+  var connectionTimeoutSeconds: CGFloat
+  var customData: String
+  var obdProtocol: PROTOCOL?
+  var obdConnectionName: String?
+  // 20032025
+  var oneSecondNanoseconds: Int64 = 1_000_000_000
+  var delayNanosecondsBTPeripherals: Int64
+  var bt: Bool
+  var wifi: Bool {
+    !bt
+  }
+  // Timeout factors
+  var timeoutMultiplyFactorWatchdog: CGFloat = 2
+  var timeoutMultiplyFactorStateWaitingPreparing: CGFloat = 2
+
+  init(
+    name: String,
+    delayNanosecondsTimeoutAdapterInitialization: Int64,
+    delayNanosecondsTimeoutDetectProtocolAutomatically: Int64,
+    connectionTimeoutSeconds: CGFloat,
+    bt: Bool,
+    delayNanosecondsWifiRetryCommand: Int64 = 0,
+    delayNanosecondsBTPeripherals: Int64 = 0,
+    wifiIp: String = String(),
+    wifiPort: Int = 0
+  ) {
+    self.name = name
+    self.delayNanosecondsTimeoutAdapterInitialization =
+      delayNanosecondsTimeoutAdapterInitialization
+    self.delayNanosecondsWifiRetryCommand =
+      delayNanosecondsWifiRetryCommand
+    self.delayNanosecondsTimeoutDetectProtocolAutomatically =
+      delayNanosecondsTimeoutDetectProtocolAutomatically
+    self.connectionTimeoutSeconds = connectionTimeoutSeconds
+    self.wifiIp = wifiIp.fullTrim()
+    self.wifiPort = wifiPort
+    self.customData = "\(self.wifiIp):\(self.wifiPort)"
+    self.delayNanosecondsBTPeripherals = delayNanosecondsBTPeripherals
+    self.bt = bt
+  }
+}
+```
+
+------------
 
 SwiftOBD2 is a Swift package designed to simplify communication with vehicles using an ELM327 OBD2 adapter. It provides a straightforward and powerful interface for interacting with your vehicle's onboard diagnostics system, allowing you to retrieve real-time data and perform diagnostics. [Sample App](https://github.com/kkonteh97/SwiftOBD2App).
 
