@@ -28,6 +28,8 @@ final class OneObdSetting: Codable {
   // Timeout factors
   var timeoutMultiplyFactorWatchdog: CGFloat = 2
   var timeoutMultiplyFactorStateWaitingPreparing: CGFloat = 2
+  // 21032025
+  var timeoutSecondsSendCommandBT: CGFloat
 
   init(
     name: String,
@@ -38,7 +40,8 @@ final class OneObdSetting: Codable {
     delayNanosecondsWifiRetryCommand: Int64 = 0,
     delayNanosecondsBTPeripherals: Int64 = 0,
     wifiIp: String = String(),
-    wifiPort: Int = 0
+    wifiPort: Int = 0,
+    timeoutSecondsSendCommandBT: CGFloat = 3
   ) {
     self.name = name
     self.delayNanosecondsTimeoutAdapterInitialization =
@@ -53,7 +56,37 @@ final class OneObdSetting: Codable {
     self.customData = "\(self.wifiIp):\(self.wifiPort)"
     self.delayNanosecondsBTPeripherals = delayNanosecondsBTPeripherals
     self.bt = bt
+    self.timeoutSecondsSendCommandBT = timeoutSecondsSendCommandBT
   }
+
+  // 11032025
+  func resetWifiAndPort() {
+    updateWifiIpAndPort(
+      ipAndPort: "\(Obd2Helper.mainIp):\(Obd2Helper.mainPort)")
+  }
+
+  func updateWifiIpAndPort(ipAndPort: String) {
+    let pair = ipAndPort.generateIpAndPort()
+    self.wifiIp = pair.ip
+    self.wifiPort = Int(pair.port)!
+    self.customData = "\(self.wifiIp):\(self.wifiPort)"
+    // STORE
+    OilerHelper.masterOilerSettings.storeOilerSettings()
+  }
+
+  func updateObdProtocol(obdProtocol: PROTOCOL?) {
+    self.obdProtocol = obdProtocol
+    // STORE
+    OilerHelper.masterOilerSettings.storeOilerSettings()
+  }
+
+  // 12032025
+  func updateObdConnectionName(connectionName: String?) {
+    self.obdConnectionName = connectionName
+    // STORE
+    OilerHelper.masterOilerSettings.storeOilerSettings()
+  }
+
 }
 ```
 
