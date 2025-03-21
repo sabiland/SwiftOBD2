@@ -375,7 +375,9 @@ class BLEManager: NSObject, CommProtocol {
             logger.error("Error: Missing peripheral or ecu characteristic.")
             throw BLEManagerError.missingPeripheralOrCharacteristic
         }
-        return try await Timeout(seconds: 3) {
+        return try await Timeout(
+            seconds: OBDService.oilerObdSetting.timeoutSecondsSendCommandBT
+        ) {
             try await withCheckedThrowingContinuation {
                 (continuation: CheckedContinuation<[String], Error>) in
                 // Set up a timeout timer

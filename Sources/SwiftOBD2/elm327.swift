@@ -163,7 +163,6 @@ class ELM327 {
                 logger.warning(
                     "Preferred protocol \(protocolToTest.description) failed. Falling back to automatic detection."
                 )
-                OBDService.oilerObdSetting.updateObdProtocol(obdProtocol: nil)
             }
         }
 
@@ -239,6 +238,7 @@ class ELM327 {
             logger.error(
                 "Failed to set protocol \(obdProtocol.description): \(error.localizedDescription)"
             )
+            OBDService.oilerObdSetting.updateObdProtocol(obdProtocol: nil)
             return false
         }
 
@@ -267,6 +267,7 @@ class ELM327 {
                     m: "Protocol response not valid \(response).")
                 logger.warning("Protocol response not valid \(response).")
             }
+            OBDService.oilerObdSetting.updateObdProtocol(obdProtocol: nil)
             return false
         }
     }
