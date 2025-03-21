@@ -4,7 +4,7 @@
 
 ------------
 
-NOTE: This is my fork/implementation. I use 2 global static objets for specific (bluetooth or wifi) configuration.
+NOTE: This is my fork/implementation. I use 2 global static objets for specific (bluetooth or wifi) configuration. I set and use `OBDService.oilerObdSetting` object before using `wifi` or `bluetooth` configuration.
 
 ```
 final class OneObdSetting: Codable {
