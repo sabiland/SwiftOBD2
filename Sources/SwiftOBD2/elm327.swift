@@ -263,8 +263,6 @@ class ELM327 {
             )
             // Log invalid response
             if let response = response {
-                await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                    m: "Protocol response not valid \(response).")
                 logger.warning("Protocol response not valid \(response).")
             }
             OBDService.oilerObdSetting.updateObdProtocol(obdProtocol: nil)
@@ -293,27 +291,16 @@ class ELM327 {
 
         do {
             // Initializing the adapter
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "Initializing ELM327 adapter..")
             _ = try await sendCommand("ATZ")  // Reset adapter
             try await Task.sleep(nanoseconds: delay)
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(m: "ATZ")
             _ = try await okResponse("ATE0")  // Echo off
             try await Task.sleep(nanoseconds: delay)
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "ATE0")
             _ = try await okResponse("ATL0")  // Linefeeds off
             try await Task.sleep(nanoseconds: delay)
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "ATL0")
             _ = try await okResponse("ATS0")  // Spaces off
             try await Task.sleep(nanoseconds: delay)
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "ATS0")
             _ = try await okResponse("ATH1")  // Headers on
             try await Task.sleep(nanoseconds: delay)
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "ATH1")
 
             // If a preferred protocol is provided, skip ATSP0
             if let preferredProtocol = preferredProtocol {
@@ -321,16 +308,10 @@ class ELM327 {
                 logger.info(
                     "Using preferred protocol: \(preferredProtocol.description)"
                 )
-                await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                    m:
-                        "Using preferred protocol: \(preferredProtocol.description)"
-                )
             } else {
                 // If no preferred protocol, use ATSP0 to set the protocol to automatic
                 _ = try await okResponse("ATSP0")  // Set protocol to automatic
                 try await Task.sleep(nanoseconds: delay)
-                await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                    m: "ATSP0")
             }
 
             logger.info("ELM327 adapter initialized successfully.")

@@ -103,9 +103,7 @@ class BLEManager: NSObject, CommProtocol {
     func didUpdateState(_ central: CBCentralManager) {
         switch central.state {
         case .poweredOn:
-            #if DEBUG
-                logger.debug("Bluetooth is On.")
-            #endif
+            logger.debug("Bluetooth is On.")
             guard let device = connectedPeripheral else {
                 startScanning(Self.services)
                 return
@@ -419,13 +417,19 @@ class BLEManager: NSObject, CommProtocol {
 
             // remove the last line
             lines.removeLast()
-            #if DEBUG
-                logger.debug("Response: \(lines)")
-            #endif
+            logger.debug("Response: \(lines)")
 
             if sendMessageCompletion != nil {
                 if lines[0].uppercased().contains("NO DATA") {
-                    sendMessageCompletion?(nil, BLEManagerError.noData)
+                    // SABI TWEAK
+                    logger.info("SABI TWEAK: sendMessageCompletion?([], nil)")
+                    // testing: todo: SUPER MUST TEST THIS IF ALL CASES OK !!!
+                    // testing: todo: SUPER MUST TEST THIS IF ALL CASES OK !!!
+                    // testing: todo: SUPER MUST TEST THIS IF ALL CASES OK !!!
+                    sendMessageCompletion?([], nil)  // ✅ empty array, no error
+
+                    // SABI TWEAK - ORIGINAL CODE
+                    //sendMessageCompletion?(nil, BLEManagerError.noData)
                 } else {
                     sendMessageCompletion?(lines, nil)
                 }

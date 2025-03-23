@@ -122,13 +122,10 @@ class WifiManager: CommProtocol {
             forceDisconnect()
         }
         guard let continuation = continuationToResume else { return }
+        logger.error(
+            "cancelConnection - continuation resumed with error: \(error.localizedDescription)."
+        )
         continuation.resume(throwing: error)
-        Task {
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m:
-                    "Continuation resumed with error: \(error.localizedDescription)."
-            )
-        }
     }
 
     func forceDisconnect() {
@@ -182,12 +179,23 @@ class WifiManager: CommProtocol {
         logger.info("connectAsync => NWConnection")
 
         let tcpOptions = NWProtocolTCP.Options()
-        tcpOptions.connectionTimeout = Int(timeout)
-        tcpOptions.enableFastOpen = true
-
+        
+        // testing: todo:
+        // testing: todo: <# Enter Testing/Todo text #>
+        // testing: todo:
+        tcpOptions.connectionTimeout = 0  // Use system default
+        //tcpOptions.connectionTimeout = Int(timeout)
+        
+        tcpOptions.enableFastOpen = OBDService.oilerObdSetting.wifiTcpOptionsEnableFastOpen
+        // 23032025
+        // testing: todo:
+        // testing: todo: MAKE IT AS obd setting property !!!
+        // testing: todo:
+        tcpOptions.noDelay = OBDService.oilerObdSetting.wifiTcpOptionsNoDelay
+        
         let params = NWParameters(tls: nil, tcp: tcpOptions)
-        params.allowFastOpen = true  // Allow fast TCP connection
-        params.preferNoProxies = true
+        params.allowFastOpen = OBDService.oilerObdSetting.wifiNWParametersAllowFastOpen  // Allow fast TCP connection
+        params.preferNoProxies = OBDService.oilerObdSetting.wifiNWParametersPreferNoProxies
 
         tcp = NWConnection(host: host, port: port, using: params)
 

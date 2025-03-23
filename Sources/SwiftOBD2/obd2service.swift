@@ -130,29 +130,10 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         preferedProtocol: PROTOCOL? = nil, timeout: TimeInterval = 7
     ) async throws -> OBDInfo {
         do {
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "Before connectToAdapter")
-
             try await elm327.connectToAdapter(timeout: timeout)
-
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "After connectToAdapter")
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "Before adapterInitialization")
-
             try await elm327.adapterInitialization(
                 preferredProtocol: preferedProtocol)
-
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "After adapterInitialization")
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "Before initializeVehicle")
-
             let obdInfo = try await initializeVehicle(preferedProtocol)
-
-            await Obd2EngineViewController.makeGenericObd2DebugMessage(
-                m: "After initializeVehicle")
-
             return obdInfo
         } catch {
             throw OBDServiceError.adapterConnectionFailed(
