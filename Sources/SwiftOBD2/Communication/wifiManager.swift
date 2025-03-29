@@ -313,7 +313,7 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
     private func cancelConnection(with error: CommunicationError) {
         var cont: CheckedContinuation<Void, Error>?
         connectionLock.withLock {
-            guard !isCancelled else { return }
+            guard connectionContinuation != nil else { return }
             isCancelled = true
             cont = connectionContinuation
             connectionContinuation = nil

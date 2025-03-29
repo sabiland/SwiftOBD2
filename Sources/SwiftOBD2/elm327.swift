@@ -116,35 +116,21 @@ class ELM327 {
         preferredProtocol: PROTOCOL?,
         oilerObdSetting: OneObdSetting
     ) async throws -> OBDInfo {
-        //        var obdProtocol: PROTOCOL?
         let detectedProtocol = try await detectProtocol(
             preferredProtocol: preferredProtocol,
             oilerObdSetting: oilerObdSetting
         )
-
-        //        guard let obdProtocol = detectedProtocol else {
-        //            throw SetupError.noProtocolFound
-        //        }
-
-        //        self.obdProtocol = obdProtocol
         canProtocol = protocols[detectedProtocol]
-
         let vin = await requestVin(oilerObdSetting: oilerObdSetting)
-
-        //        try await setHeader(header: "7E0")
-
         let supportedPIDs = await getSupportedPIDs(
             oilerObdSetting: oilerObdSetting
         )
-
         guard let messages = try canProtocol?.parse(r100) else {
             throw ELM327Error.invalidResponse(
                 message: "Invalid response to 0100"
             )
         }
-
         let ecuMap = populateECUMap(messages)
-
         connectionState = .connectedToVehicle
         return OBDInfo(
             vin: vin,
@@ -636,12 +622,40 @@ extension ELM327 {
     }
 
     private func parseResponse(_ response: [String]) -> Set<String>? {
+        guard let parsed = try? canProtocol?.parse(response),
+            let first = parsed.first
+        else {
+            print("❌ Failed to parse any CAN response")
+            return nil
+        }
+
+        guard let ecuData = first.data else {
+            print("❌ Parsed message has no data")
+            return nil
+        }
+
+        print(
+            "📦 Raw data: \(ecuData.map { String(format: "%02X", $0) }.joined(separator: " "))"
+        )
+
+        // Try both with and without dropFirst()
+        let binaryData = BitArray(data: ecuData.dropFirst()).binaryArray
+        // let binaryData = BitArray(data: ecuData).binaryArray
+
+        let pids = extractSupportedPIDs(binaryData)
+        print("🧮 Extracted PIDs: \(pids)")
+        return pids
+    }
+
+    /*
+    private func parseResponse(_ response: [String]) -> Set<String>? {
         guard let ecuData = try? canProtocol?.parse(response).first?.data else {
             return nil
         }
         let binaryData = BitArray(data: ecuData.dropFirst()).binaryArray
         return extractSupportedPIDs(binaryData)
     }
+     */
 
     func extractSupportedPIDs(_ binaryData: [Int]) -> Set<String> {
         var supportedPIDs: Set<String> = []
@@ -697,6 +711,16 @@ extension String {
 
     var isHex: Bool {
         !isEmpty && allSatisfy(\.isHexDigit)
+    }
+
+    var cleanedHex: String {
+        let hex = self.uppercased().filter { "0123456789ABCDEF".contains($0) }
+        return hex.count % 2 == 0 ? hex : String(hex.dropLast())  // ⚠️ drop odd trailing char
+    }
+
+    var isLikelyHex: Bool {
+        return !self.isEmpty && self.count % 2 == 0
+            && self.allSatisfy { $0.isHexDigit }
     }
 }
 

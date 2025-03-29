@@ -18,14 +18,10 @@ public struct LegacyParcer {
     let frames: [LegacyFrame]
 
     public init(_ lines: [String]) throws {
-        let obdLines = lines
-            .compactMap { $0.replacingOccurrences(of: " ", with: "") }
-            .filter(\.isHex)
-
+        let obdLines = lines.cleanedHexLines
         frames = try obdLines.compactMap {
             try LegacyFrame(raw: $0)
         }
-
         let framesByECU = Dictionary(grouping: frames) { $0.txID }
         messages = try framesByECU.values.compactMap {
             try LegacyMessage(frames: $0)
@@ -40,9 +36,9 @@ struct LegacyMessage: MessageProtocol {
     public var ecu: ECUID
 
     init(frames: [LegacyFrame]) throws {
-//        guard !frames.isEmpty else {
-//            return nil
-//        }
+        //        guard !frames.isEmpty else {
+        //            return nil
+        //        }
         self.frames = frames
         ecu = frames.first?.txID ?? .unknown
 
@@ -56,8 +52,9 @@ struct LegacyMessage: MessageProtocol {
         }
     }
 
-    private func parseSingleFrameMessage(_ frames: [LegacyFrame]) throws -> Data {
-        guard let frame = frames.first else { // Pre-validate the length
+    private func parseSingleFrameMessage(_ frames: [LegacyFrame]) throws -> Data
+    {
+        guard let frame = frames.first else {  // Pre-validate the length
             throw ParserError.error("Frame validation failed")
         }
 
@@ -76,7 +73,8 @@ struct LegacyMessage: MessageProtocol {
         }
     }
 
-    private func parseMultiFrameMessage(_ frames: [LegacyFrame]) throws -> Data {
+    private func parseMultiFrameMessage(_ frames: [LegacyFrame]) throws -> Data
+    {
         let mode = frames.first?.data.first
 
         if mode == 0x43 {
@@ -121,18 +119,18 @@ struct LegacyMessage: MessageProtocol {
         }
     }
 
-//    private func assembleData(firstFrame: LegacyFrame, consecutiveFrames: [LegacyFrame]) -> Data {
-//        var assembledFrame: LegacyFrame = firstFrame
-//        // Extract data from consecutive frames, skipping the PCI byte
-//        for frame in consecutiveFrames {
-//            assembledFrame.data.append(frame.data[1...])
-//        }
-//        return extractDataFromFrame(assembledFrame, startIndex: 3)
-//    }
-//
-//    private func extractDataFromFrame(_ frame: LegacyFrame, startIndex: Int) -> Data? {
-//        return nil
-//    }
+    //    private func assembleData(firstFrame: LegacyFrame, consecutiveFrames: [LegacyFrame]) -> Data {
+    //        var assembledFrame: LegacyFrame = firstFrame
+    //        // Extract data from consecutive frames, skipping the PCI byte
+    //        for frame in consecutiveFrames {
+    //            assembledFrame.data.append(frame.data[1...])
+    //        }
+    //        return extractDataFromFrame(assembledFrame, startIndex: 3)
+    //    }
+    //
+    //    private func extractDataFromFrame(_ frame: LegacyFrame, startIndex: Int) -> Data? {
+    //        return nil
+    //    }
 }
 
 struct LegacyFrame {

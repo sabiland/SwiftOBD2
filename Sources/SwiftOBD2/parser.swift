@@ -40,14 +40,9 @@ public struct CANParser {
     let frames: [Frame]
 
     public init(_ lines: [String], idBits: Int) throws {
-        let obdLines = lines
-            .map { $0.replacingOccurrences(of: " ", with: "") }
-            .filter(\.isHex)
-
+        let obdLines = lines.cleanedHexLines
         frames = try obdLines.compactMap { try Frame(raw: $0, idBits: idBits) }
-
         let framesByECU = Dictionary(grouping: frames) { $0.txID }
-
         messages = try framesByECU.values.compactMap { try Message(frames: $0) }
     }
 }
@@ -74,23 +69,29 @@ public struct Message: MessageProtocol {
 
     private func parseSingleFrameMessage(_ frames: [Frame]) throws -> Data {
         guard let frame = frames.first, frame.type == .singleFrame,
-              let dataLen = frame.dataLen, dataLen > 0,
-              frame.data.count >= dataLen + 1
-        else { // Pre-validate the length
+            let dataLen = frame.dataLen, dataLen > 0,
+            frame.data.count >= dataLen + 1
+        else {  // Pre-validate the length
             throw ParserError.error("Frame validation failed")
         }
         return frame.data.dropFirst(2)
     }
 
     private func parseMultiFrameMessage(_ frames: [Frame]) throws -> Data {
-        guard let firstFrame = frames.first(where: { $0.type == .firstFrame }) else {
+        guard let firstFrame = frames.first(where: { $0.type == .firstFrame })
+        else {
             throw ParserError.error("Failed to parse multi frame message")
         }
         let consecutiveFrames = frames.filter { $0.type == .consecutiveFrame }
-        return try assembleData(firstFrame: firstFrame, consecutiveFrames: consecutiveFrames)
+        return try assembleData(
+            firstFrame: firstFrame,
+            consecutiveFrames: consecutiveFrames
+        )
     }
 
-    private func assembleData(firstFrame: Frame, consecutiveFrames: [Frame]) throws -> Data {
+    private func assembleData(firstFrame: Frame, consecutiveFrames: [Frame])
+        throws -> Data
+    {
         var assembledFrame: Frame = firstFrame
         // Extract data from consecutive frames, skipping the PCI byte
         for frame in consecutiveFrames {
@@ -99,7 +100,9 @@ public struct Message: MessageProtocol {
         return try extractDataFromFrame(assembledFrame, startIndex: 3)
     }
 
-    private func extractDataFromFrame(_ frame: Frame, startIndex: Int) throws -> Data {
+    private func extractDataFromFrame(_ frame: Frame, startIndex: Int) throws
+        -> Data
+    {
         guard let frameDataLen = frame.dataLen else {
             throw ParserError.error("Failed to extract data from frame")
         }
@@ -107,7 +110,7 @@ public struct Message: MessageProtocol {
         guard endIndex <= frame.data.count else {
             return frame.data[startIndex...]
         }
-        return frame.data[startIndex ..< endIndex]
+        return frame.data[startIndex..<endIndex]
     }
 }
 
@@ -119,7 +122,7 @@ struct Frame {
     var rxID: UInt8
     var txID: ECUID
     var type: FrameType
-    var seqIndex: UInt8 = 0 // Only used when type = CF
+    var seqIndex: UInt8 = 0  // Only used when type = CF
     var dataLen: UInt8?
 
     init(raw: String, idBits: Int) throws {
@@ -132,14 +135,22 @@ struct Frame {
         data = Data(dataBytes.dropFirst(4))
 
         guard dataBytes.count >= 6, dataBytes.count <= 12 else {
-            print("invalid frame size", dataBytes.compactMap { String(format: "%02X", $0) }.joined(separator: " "))
+            print(
+                "invalid frame size",
+                dataBytes.compactMap { String(format: "%02X", $0) }.joined(
+                    separator: " "
+                )
+            )
             throw ParserError.error("Invalid frame size")
         }
 
         guard let dataType = data.first,
-              let type = FrameType(rawValue: dataType & 0xF0)
+            let type = FrameType(rawValue: dataType & 0xF0)
         else {
-            print("invalid frame type", dataBytes.compactMap { String(format: "%02X", $0) })
+            print(
+                "invalid frame type",
+                dataBytes.compactMap { String(format: "%02X", $0) }
+            )
             throw ParserError.error("Invalid frame type")
         }
 
