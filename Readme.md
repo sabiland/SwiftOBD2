@@ -4,7 +4,7 @@
 
 ------------
 
-NOTE: This is my fork/implementation. I use 2 global static objets for specific (bluetooth or wifi) configuration. I inject custom `OneObdSetting` object into `OBDService` init for `wifi` and `bluetooth` configuration.
+NOTE: This is my fork/implementation. I inject custom `OneObdSetting` object into `OBDService` init for `wifi` and `bluetooth` configuration.
 
 ```
 enum OneObdSettingType: Codable {
