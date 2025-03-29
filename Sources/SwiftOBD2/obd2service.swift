@@ -33,7 +33,9 @@ public class ConfigurationService {
         }
         set {
             UserDefaults.standard.set(
-                newValue.rawValue, forKey: "connectionType")
+                newValue.rawValue,
+                forKey: "connectionType"
+            )
         }
     }
 }
@@ -46,7 +48,11 @@ public class ConfigurationService {
 ///   - Providing information about the vehicle.
 ///   - Managing the connection state.
 public class OBDService: ObservableObject, OBDServiceDelegate {
-    static var oilerObdSetting: OneObdSetting!
+    static let retryCountSendCommand: Int = 3
+    static let retryCountRequestPIDs: Int = 10
+    public static let intervalContinuousUpdate: CGFloat = 0.3
+
+    var oilerObdSetting: OneObdSetting
 
     @Published public private(set) var connectionState: ConnectionState =
         .disconnected
@@ -74,8 +80,12 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Parameter connectionType: The desired connection type (default is Bluetooth).
     ///
     ///
-    public init(connectionType: ConnectionType = .bluetooth) {
+    init(
+        connectionType: ConnectionType = .bluetooth,
+        oilerObdSetting: OneObdSetting
+    ) {
         self.connectionType = connectionType
+        self.oilerObdSetting = oilerObdSetting
 
         switch connectionType {
         case .bluetooth:
@@ -126,18 +136,25 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Parameter preferedProtocol: The optional OBD2 protocol to use (if supported).
     /// - Returns: Information about the connected vehicle (`OBDInfo`).
     /// - Throws: Errors that might occur during the connection process.
-    public func startConnection(
-        preferedProtocol: PROTOCOL? = nil, timeout: TimeInterval = 7
-    ) async throws -> OBDInfo {
+    public func startConnection() async throws -> OBDInfo {
+        let preferedProtocol: PROTOCOL? = oilerObdSetting.obdProtocol
+        let timeout: TimeInterval = oilerObdSetting.connectionTimeoutSeconds
+
         do {
-            try await elm327.connectToAdapter(timeout: timeout)
+            try await elm327.connectToAdapter(
+                timeout: timeout,
+                oilerObdSetting: oilerObdSetting
+            )
             try await elm327.adapterInitialization(
-                preferredProtocol: preferedProtocol)
+                preferredProtocol: preferedProtocol,
+                oilerObdSetting: oilerObdSetting
+            )
             let obdInfo = try await initializeVehicle(preferedProtocol)
             return obdInfo
         } catch {
             throw OBDServiceError.adapterConnectionFailed(
-                underlyingError: error)  // Propagate
+                underlyingError: error
+            )  // Propagate
         }
     }
 
@@ -150,7 +167,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         -> OBDInfo
     {
         let obd2info = try await elm327.setupVehicle(
-            preferredProtocol: preferedProtocol)
+            preferredProtocol: preferedProtocol,
+            oilerObdSetting: oilerObdSetting
+        )
         return obd2info
     }
 
@@ -194,8 +213,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Returns: A publisher with the measurement result.
     /// - Throws: Errors that might occur during the request process.
     public func startContinuousUpdates(
-        _ pids: [OBDCommand], unit: MeasurementUnit = .metric,
-        interval: TimeInterval = 0.3
+        _ pids: [OBDCommand],
+        unit: MeasurementUnit = .metric,
+        interval: TimeInterval = OBDService.intervalContinuousUpdate
     ) -> AnyPublisher<[OBDCommand: MeasurementResult], Error> {
         Timer.publish(every: interval, on: .main, in: .common)
             .autoconnect()
@@ -210,7 +230,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                     Task(priority: .userInitiated) {
                         do {
                             let results = try await self.requestPIDs(
-                                pids, unit: unit)
+                                pids,
+                                unit: unit
+                            )
                             promise(.success(results))
                         } catch {
                             promise(.failure(error))
@@ -241,7 +263,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         let response = try await sendCommandInternal(
             "01"
                 + commands.compactMap { $0.properties.command.dropFirst(2) }
-                .joined(), retries: 10)
+                .joined(),
+            retries: OBDService.retryCountRequestPIDs
+        )
 
         guard
             let responseData = try elm327.canProtocol?.parse(response).first?
@@ -268,7 +292,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     > {
         do {
             let response = try await sendCommandInternal(
-                command.properties.command, retries: 3)
+                command.properties.command,
+                retries: OBDService.retryCountSendCommand
+            )
             guard
                 let responseData = try elm327.canProtocol?.parse(response)
                     .first?.data
@@ -278,7 +304,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
             return command.properties.decode(data: responseData.dropFirst())
         } catch {
             throw OBDServiceError.commandFailed(
-                command: command.properties.command, error: error)
+                command: command.properties.command,
+                error: error
+            )
         }
     }
 
@@ -286,7 +314,7 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     ///   - Parameter command: The OBD2 command to send.
     ///   - Returns: The raw response from the vehicle.
     public func getSupportedPIDs() async -> [OBDCommand] {
-        await elm327.getSupportedPIDs()
+        await elm327.getSupportedPIDs(oilerObdSetting: oilerObdSetting)
     }
 
     ///  Scans for trouble codes and returns the result.
@@ -294,7 +322,9 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     ///  - Throws: Errors that might occur during the request process.
     public func scanForTroubleCodes() async throws -> [ECUID: [TroubleCode]] {
         do {
-            return try await elm327.scanForTroubleCodes()
+            return try await elm327.scanForTroubleCodes(
+                oilerObdSetting: oilerObdSetting
+            )
         } catch {
             throw OBDServiceError.scanFailed(underlyingError: error)
         }
@@ -305,7 +335,7 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     ///     - `OBDServiceError.notConnectedToVehicle` if the adapter is not connected to a vehicle.
     public func clearTroubleCodes() async throws {
         do {
-            try await elm327.clearTroubleCodes()
+            try await elm327.clearTroubleCodes(oilerObdSetting: oilerObdSetting)
         } catch {
             throw OBDServiceError.clearFailed(underlyingError: error)
         }
@@ -316,7 +346,7 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     ///  - Throws: Errors that might occur during the request process.
     public func getStatus() async throws -> Result<DecodeResult, DecodeError> {
         do {
-            return try await elm327.getStatus()
+            return try await elm327.getStatus(oilerObdSetting: oilerObdSetting)
         } catch {
             throw error
         }
@@ -334,7 +364,11 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         async throws -> [String]
     {
         do {
-            return try await elm327.sendCommand(message, retries: retries)
+            return try await elm327.sendCommand(
+                message,
+                retries: retries,
+                oilerObdSetting: oilerObdSetting
+            )
         } catch {
             throw OBDServiceError.commandFailed(command: message, error: error)
         }
@@ -343,17 +377,23 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     public func connectToPeripheral(peripheral: CBPeripheral) async throws {
         do {
             try await elm327.connectToAdapter(
-                timeout: 5, peripheral: peripheral)
+                timeout: 5,
+                peripheral: peripheral,
+                oilerObdSetting: oilerObdSetting
+            )
         } catch {
             throw OBDServiceError.adapterConnectionFailed(
-                underlyingError: error)
+                underlyingError: error
+            )
         }
     }
 
     public func scanForPeripherals() async throws {
         do {
             self.isScanning = true
-            try await elm327.scanForPeripherals()
+            try await elm327.scanForPeripherals(
+                oilerObdSetting: oilerObdSetting
+            )
             self.isScanning = false
         } catch {
             throw OBDServiceError.scanFailed(underlyingError: error)
