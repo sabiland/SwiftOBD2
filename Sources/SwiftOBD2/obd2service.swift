@@ -139,7 +139,6 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     public func startConnection() async throws -> OBDInfo {
         let preferedProtocol: PROTOCOL? = oilerObdSetting.obdProtocol
         let timeout: TimeInterval = oilerObdSetting.connectionTimeoutSeconds
-
         do {
             try await elm327.connectToAdapter(
                 timeout: timeout,
