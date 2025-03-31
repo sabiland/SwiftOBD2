@@ -40,7 +40,7 @@ public struct CANParser {
     let frames: [Frame]
 
     public init(_ lines: [String], idBits: Int) throws {
-        let obdLines = lines.cleanedHexLines
+        let obdLines = lines.sanitizedELM327LinesAndCleanedHexLines
         frames = try obdLines.compactMap { try Frame(raw: $0, idBits: idBits) }
         let framesByECU = Dictionary(grouping: frames) { $0.txID }
         messages = try framesByECU.values.compactMap { try Message(frames: $0) }

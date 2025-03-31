@@ -30,6 +30,13 @@ enum CommunicationError: Error {
     case preparingTimeout
     case connectionInProgress
     case backgroundCancelled
+
+    var isTimeout: Bool {
+        if case .timeout = self {
+            return true
+        }
+        return false
+    }
 }
 
 class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
@@ -341,7 +348,7 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
         logger.info("Resuming continuation successfully.")
         cont?.resume(returning: ())  // ✅ Resume first
 
-        DispatchQueue.main.async {
+        Helper.runAsyncMain {
             self.connectionState = .connectedToAdapter
         }
     }

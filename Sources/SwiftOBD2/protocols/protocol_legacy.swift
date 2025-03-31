@@ -18,7 +18,7 @@ public struct LegacyParcer {
     let frames: [LegacyFrame]
 
     public init(_ lines: [String]) throws {
-        let obdLines = lines.cleanedHexLines
+        let obdLines = lines.sanitizedELM327LinesAndCleanedHexLines
         frames = try obdLines.compactMap {
             try LegacyFrame(raw: $0)
         }
@@ -75,49 +75,122 @@ struct LegacyMessage: MessageProtocol {
 
     private func parseMultiFrameMessage(_ frames: [LegacyFrame]) throws -> Data
     {
-        let mode = frames.first?.data.first
+        for (i, f) in frames.enumerated() {
+            print(
+                "🧩 [\(i)] Frame Data: \(f.data.map { String(format: "%02X", $0) }.joined(separator: " "))"
+            )
+        }
 
+        guard let mode = frames.first?.data.first else {
+            throw ParserError.error("Missing mode byte")
+        }
+
+        // VIN-like multi-frame response (e.g., mode 0x43)
         if mode == 0x43 {
             var data = Data([0x43, 0x00])
-
             for frame in frames {
                 data.append(frame.data.dropFirst())
             }
+            return data
+        }
 
+        // ⚠️ Check if this is an ELM327 emulator quirk: short 4-byte frames
+        let isELMShortQuirk = frames.allSatisfy { $0.data.count == 4 }
+        if isELMShortQuirk {
+            var data = Data()
+            for frame in frames {
+                data.append(frame.data)
+            }
+            return data
+        }
+
+        // ✅ Check if order byte exists at index 2 and is valid
+        let orderByteValid = frames.allSatisfy {
+            $0.data.count > 2 && $0.data[2] >= 1 && $0.data[2] <= 0xFF
+        }
+
+        guard orderByteValid else {
+            throw ParserError.error(
+                "Invalid or missing order byte in one or more frames"
+            )
+        }
+
+        // ✅ ELM emulator quirk workaround: 5-byte VIN-like blocks with no order byte
+        let looksLikeELMQuirk = frames.allSatisfy { $0.data.count == 5 }
+        if looksLikeELMQuirk {
+            var data = Data()
+            for frame in frames {
+                data.append(frame.data)
+            }
+            return data
+        }
+
+        // ✅ Sort frames by the order byte
+        let sortedFrames = frames.sorted { $0.data[2] < $1.data[2] }
+
+        // ✅ Ensure first frame has order byte 1
+        guard sortedFrames.first?.data[2] == 1 else {
+            throw ParserError.error(
+                "First frame does not start with order byte 1"
+            )
+        }
+
+        // ✅ Combine all frame data (dropping the order byte)
+        var data = Data()
+        for frame in sortedFrames {
+            data.append(frame.data.dropFirst(3))
+        }
+
+        return data
+    }
+
+    /*
+    private func parseMultiFrameMessage(_ frames: [LegacyFrame]) throws -> Data
+    {
+        let mode = frames.first?.data.first
+    
+        if mode == 0x43 {
+            var data = Data([0x43, 0x00])
+    
+            for frame in frames {
+                data.append(frame.data.dropFirst())
+            }
+    
             return data
         } else {
             ///  generic multiline requests carry an order byte
-
+    
             ///  Ex.
             ///           [      Frame       ]
             ///  48 6B 10 49 02 01 00 00 00 31 ck
             ///  48 6B 10 49 02 02 44 34 47 50 ck
             ///  48 6B 10 49 02 03 30 30 52 35 ck
             ///  etc...         [] [  Data   ]
-
+    
             ///  becomes:
             ///  49 02 [] 00 00 00 31 44 34 47 50 30 30 52 35
             ///       |  [         ] [         ] [         ]
             ///   order byte is removed
-
+    
             //  sort the frames by the order byte
             let sortedFrames = frames.sorted { $0.data[2] < $1.data[2] }
-
+    
             // check contiguity
             guard sortedFrames.first?.data[2] == 1 else {
                 throw ParserError.error("Invalid order byte")
             }
-
+    
             // now that they're in order, accumulate the data from each frame
             var data = Data()
             for frame in sortedFrames {
                 // pop off the only the order byte
                 data.append(frame.data.dropFirst(3))
             }
-
+    
             return data
         }
     }
+     */
 
     //    private func assembleData(firstFrame: LegacyFrame, consecutiveFrames: [LegacyFrame]) -> Data {
     //        var assembledFrame: LegacyFrame = firstFrame
@@ -142,6 +215,39 @@ struct LegacyFrame {
 
     init(raw: String) throws {
         self.raw = raw
+        let dataBytes = raw.hexBytes
+
+        if Obd2Helper.checkIsSimulatorAndELM327EmulatorEnabled() {
+            // Allow shorter frames (e.g., 4 bytes)
+            guard dataBytes.count >= 4 else {
+                throw ParserError.error(
+                    "Invalid frame size (even for ELM emulator)"
+                )
+            }
+
+        } else {
+            guard dataBytes.count >= 6, dataBytes.count <= 12 else {
+                throw ParserError.error("Invalid frame size")
+            }
+        }
+
+        priority = dataBytes[0]
+        rxID = dataBytes[1]
+        txID = ECUID(rawValue: dataBytes[2] & 0x07) ?? .unknown
+        data = Data(dataBytes.dropFirst(3))
+    }
+}
+
+/*
+struct LegacyFrame {
+    var raw: String
+    var data = Data()
+    var priority: UInt8
+    var rxID: UInt8
+    var txID: ECUID
+
+    init(raw: String) throws {
+        self.raw = raw
         let rawData = raw
 
         let dataBytes = rawData.hexBytes
@@ -156,6 +262,7 @@ struct LegacyFrame {
         txID = ECUID(rawValue: dataBytes[2] & 0x07) ?? .unknown
     }
 }
+ */
 
 public protocol MessageProtocol {
     var data: Data? { get }
