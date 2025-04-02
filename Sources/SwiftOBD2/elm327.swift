@@ -55,7 +55,7 @@ class ELM327 {
     var canProtocol: CANProtocol?
 
     private let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier ?? "com.example.com",
+        subsystem: IAPViewController.sabilandAppBundleId,
         category: "ELM327"
     )
     private var comm: CommProtocol

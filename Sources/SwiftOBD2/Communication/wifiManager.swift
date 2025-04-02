@@ -30,13 +30,7 @@ enum CommunicationError: Error {
     case preparingTimeout
     case connectionInProgress
     case backgroundCancelled
-
-    var isTimeout: Bool {
-        if case .timeout = self {
-            return true
-        }
-        return false
-    }
+    case forcingDisconnect
 }
 
 class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
@@ -47,7 +41,7 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
     weak var obdDelegate: OBDServiceDelegate?
 
     private let logger: Logger = {
-        let bundleId = Bundle.main.bundleIdentifier ?? "OilerApp"
+        let bundleId = IAPViewController.sabilandAppBundleId
         return Logger(subsystem: bundleId, category: "WifiManager")
     }()
 
@@ -161,6 +155,14 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
         let host = oilerObdSetting.wifiIp
         logger.info("connectAsync => GCDAsyncSocket")
 
+        // 01042025
+        connectionLock.withLock {
+            responseContinuation?.resume(
+                throwing: CommunicationError.forcingDisconnect
+            )
+            responseContinuation = nil
+        }
+
         //socket = GCDAsyncSocket(delegate: self, delegateQueue: .main)
         socket = GCDAsyncSocket(
             delegate: self,
@@ -173,6 +175,14 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
         ) {
             try await withCheckedThrowingContinuation { continuation in
                 self.connectionLock.withLock {
+                    if self.connectionContinuation != nil {
+                        self.logger.warning(
+                            "⚠️ Overwriting existing connectionContinuation."
+                        )
+                        self.connectionContinuation?.resume(
+                            throwing: CommunicationError.forcingDisconnect
+                        )
+                    }
                     self.connectionContinuation = continuation
                 }
 
@@ -213,23 +223,43 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
         logger.warning(
             "Socket disconnected: \(err?.localizedDescription ?? "nil")"
         )
-        cancelConnection(with: err.map { .errorOccurred($0) } ?? .timeout)
+
+        failResponseContinuation(
+            CommunicationError.errorOccurred(
+                err ?? NSError(domain: "Disconnected", code: -1)
+            )
+        )
+
+        cancelConnection(
+            with: .errorOccurred(
+                err ?? NSError(domain: "Disconnected", code: -1)
+            )
+        )
     }
 
+    // 01042025
     @objc func socket(
         _ sock: GCDAsyncSocket,
         didRead data: Data,
         withTag tag: Int
     ) {
-        guard let response = String(data: data, encoding: .utf8) else {
-            responseContinuation?.resume(
-                throwing: CommunicationError.invalidData
-            )
+        connectionLock.withLock {
+            guard let cont = responseContinuation else {
+                logger.warning(
+                    "❗ responseContinuation already nil in didRead — ignoring"
+                )
+                return
+            }
+
+            guard let response = String(data: data, encoding: .utf8) else {
+                cont.resume(throwing: CommunicationError.invalidData)
+                responseContinuation = nil
+                return
+            }
+
+            cont.resume(returning: response)
             responseContinuation = nil
-            return
         }
-        responseContinuation?.resume(returning: response)
-        responseContinuation = nil
     }
 
     @objc func socket(_ sock: GCDAsyncSocket, didWriteDataWithTag tag: Int) {
@@ -279,8 +309,29 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
             throw CommunicationError.invalidData
         }
 
-        return try await withCheckedThrowingContinuation { continuation in
-            self.responseContinuation = continuation
+        return try await withCheckedThrowingContinuation {
+            [weak self] continuation in
+            guard let self = self else {
+                continuation.resume(
+                    throwing: CommunicationError.errorOccurred(
+                        NSError(domain: "SelfDeinit", code: 0)
+                    )
+                )
+                return
+            }
+
+            connectionLock.withLock {
+                if self.responseContinuation != nil {
+                    self.logger.warning(
+                        "❗ Overwriting existing responseContinuation."
+                    )
+                    self.responseContinuation?.resume(
+                        throwing: CommunicationError.forcingDisconnect
+                    )
+                }
+                self.responseContinuation = continuation
+            }
+
             let timeout = oilerObdSetting.connectionTimeoutSeconds
             socket.write(data, withTimeout: timeout, tag: 0)
             socket.readData(
@@ -314,7 +365,39 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
             socket = nil
             isCancelled = false
         }
+
+        forceDisconnect()
+
         connectionState = .disconnected
+    }
+
+    private func forceDisconnect() {
+        logger.warning("Force disconnect.")
+        socket?.disconnect()
+        socket = nil
+        cancelTimeoutTask()
+        cancelWatchdogTimer()
+        isConnecting = false
+        isCancelled = true
+        connectionState = .disconnected
+        // 01042025
+        failResponseContinuation(CommunicationError.forcingDisconnect)
+    }
+
+    // 01042025
+    private func failResponseContinuation(_ error: Error) {
+        var cont: CheckedContinuation<String, Error>?
+        connectionLock.withLock {
+            cont = responseContinuation
+            responseContinuation = nil
+        }
+        if let cont {
+            cont.resume(throwing: error)
+        } else {
+            logger.warning(
+                "❗ Tried to fail responseContinuation but it was already nil."
+            )
+        }
     }
 
     private func cancelConnection(with error: CommunicationError) {
@@ -324,9 +407,9 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
             isCancelled = true
             cont = connectionContinuation
             connectionContinuation = nil
-            forceDisconnect()
             connectionState = .disconnected
         }
+        forceDisconnect()
         if let cont {
             logger.warning("Resuming continuation due to: \(error)")
             cont.resume(throwing: error)
@@ -342,26 +425,14 @@ class WifiManager: NSObject, CommProtocol, GCDAsyncSocketDelegate {
             }
             cont = continuation
             connectionContinuation = nil
-            // 🚫 Don't reset here — wait!
         }
 
         logger.info("Resuming continuation successfully.")
-        cont?.resume(returning: ())  // ✅ Resume first
+        cont?.resume(returning: ())
 
-        Helper.runAsyncMain {
+        DispatchQueue.main.async {
             self.connectionState = .connectedToAdapter
         }
-    }
-
-    private func forceDisconnect() {
-        logger.warning("Force disconnect.")
-        socket?.disconnect()
-        socket = nil
-        cancelTimeoutTask()
-        cancelWatchdogTimer()
-        isConnecting = false
-        isCancelled = true
-        connectionState = .disconnected
     }
 
     private func startWatchdogTimer(timeout: TimeInterval) {

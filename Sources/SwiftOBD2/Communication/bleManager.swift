@@ -43,12 +43,20 @@ class BLEManager: NSObject, CommProtocol {
     ]
 
     let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier
-            ?? IAPViewController.sabilandAppBundleId,
+        subsystem: IAPViewController.sabilandAppBundleId,
         category: "BLEManager"
     )
 
     static let RestoreIdentifierKey: String = "OBD2Adapter"
+
+    deinit {
+        logger.debug("BLEManager deinitialized. Cleaning up.")
+        sendMessageCompletion = nil
+        foundPeripheralCompletion = nil
+        connectionCompletion = nil
+        connectedPeripheral = nil
+        centralManager?.delegate = nil
+    }
 
     // MARK: Properties
 
@@ -171,6 +179,10 @@ class BLEManager: NSObject, CommProtocol {
     }
 
     func connect(to peripheral: CBPeripheral) {
+        guard centralManager.state == .poweredOn else {
+            logger.warning("Cannot connect: Bluetooth is not powered on.")
+            return
+        }
         logger.info("Connecting to: \(peripheral.name ?? "")")
         centralManager.connect(
             peripheral,
@@ -413,6 +425,11 @@ class BLEManager: NSObject, CommProtocol {
             throw BLEManagerError.sendingMessagesInProgress
         }
 
+        guard connectionState == .connectedToAdapter else {
+            logger.error("Not connected to adapter.")
+            throw BLEManagerError.peripheralNotConnected
+        }
+
         logger.info("Sending command: \(command)")
 
         guard let connectedPeripheral = connectedPeripheral,
@@ -537,15 +554,25 @@ class BLEManager: NSObject, CommProtocol {
             // First finished child task wins, cancel the other task.
             let result = try await group.next()!
             group.cancelAll()
+            self.sendMessageCompletion = nil
+            self.foundPeripheralCompletion = nil
+            self.connectionCompletion = nil
             return result
         }
     }
 
     private func resetConfigure() {
+        stopScan()
+        if let peripheral = connectedPeripheral {
+            centralManager.cancelPeripheralConnection(peripheral)
+        }
         ecuReadCharacteristic = nil
         ecuWriteCharacteristic = nil
         connectedPeripheral = nil
         connectionState = .disconnected
+        sendMessageCompletion = nil
+        foundPeripheralCompletion = nil
+        connectionCompletion = nil
     }
 }
 

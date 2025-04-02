@@ -27,8 +27,7 @@ class MOCKComm: CommProtocol {
     func reset() {}
 
     let logger = Logger(
-        subsystem: Bundle.main.bundleIdentifier
-            ?? IAPViewController.sabilandAppBundleId,
+        subsystem: IAPViewController.sabilandAppBundleId,
         category: "MOCKComm"
     )
 

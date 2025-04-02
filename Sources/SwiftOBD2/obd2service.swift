@@ -126,7 +126,7 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     // MARK: - Connection Handling
 
     public func connectionStateChanged(state: ConnectionState) {
-        Helper.runAsyncMain {
+        DispatchQueue.main.async {
             self.connectionState = state
         }
     }
