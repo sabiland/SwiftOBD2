@@ -136,7 +136,7 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Parameter preferedProtocol: The optional OBD2 protocol to use (if supported).
     /// - Returns: Information about the connected vehicle (`OBDInfo`).
     /// - Throws: Errors that might occur during the connection process.
-    public func startConnection() async throws -> OBDInfo {
+    public func startConnection(lastObdInfo: OBDInfo?) async throws -> OBDInfo {
         let preferedProtocol: PROTOCOL? = oilerObdSetting.obdProtocol
         let timeout: TimeInterval = oilerObdSetting.connectionTimeoutSeconds
         do {
@@ -148,7 +148,10 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                 preferredProtocol: preferedProtocol,
                 oilerObdSetting: oilerObdSetting
             )
-            let obdInfo = try await initializeVehicle(preferedProtocol)
+            let obdInfo = try await initializeVehicle(
+                preferedProtocol,
+                lastObdInfo: lastObdInfo
+            )
             return obdInfo
         } catch {
             throw OBDServiceError.adapterConnectionFailed(
@@ -162,12 +165,14 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Parameter preferedProtocol: The optional OBD2 protocol to use (if supported).
     /// - Returns: Information about the connected vehicle (`OBDInfo`).
     /// - Throws: Errors if the vehicle initialization process fails.
-    func initializeVehicle(_ preferedProtocol: PROTOCOL?) async throws
+    func initializeVehicle(_ preferedProtocol: PROTOCOL?, lastObdInfo: OBDInfo?)
+        async throws
         -> OBDInfo
     {
         let obd2info = try await elm327.setupVehicle(
             preferredProtocol: preferedProtocol,
-            oilerObdSetting: oilerObdSetting
+            oilerObdSetting: oilerObdSetting,
+            lastObdInfo: lastObdInfo
         )
         return obd2info
     }

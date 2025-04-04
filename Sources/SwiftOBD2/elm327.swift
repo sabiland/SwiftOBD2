@@ -114,30 +114,36 @@ class ELM327 {
     ///     - `SetupError.invalidProtocol` if the protocol is not recognized.
     func setupVehicle(
         preferredProtocol: PROTOCOL?,
-        oilerObdSetting: OneObdSetting
+        oilerObdSetting: OneObdSetting,
+        lastObdInfo: OBDInfo?
     ) async throws -> OBDInfo {
         let detectedProtocol = try await detectProtocol(
             preferredProtocol: preferredProtocol,
             oilerObdSetting: oilerObdSetting
         )
         canProtocol = protocols[detectedProtocol]
-        let vin = await requestVin(oilerObdSetting: oilerObdSetting)
-        let supportedPIDs = await getSupportedPIDs(
-            oilerObdSetting: oilerObdSetting
-        )
-        guard let messages = try canProtocol?.parse(r100) else {
-            throw ELM327Error.invalidResponse(
-                message: "Invalid response to 0100"
+        // NOTE: 04042025 - SUPER OPTIMIZATION
+        if let lastObdInfo {
+            return lastObdInfo
+        } else {
+            let vin = await requestVin(oilerObdSetting: oilerObdSetting)
+            let supportedPIDs = await getSupportedPIDs(
+                oilerObdSetting: oilerObdSetting
+            )
+            guard let messages = try canProtocol?.parse(r100) else {
+                throw ELM327Error.invalidResponse(
+                    message: "Invalid response to 0100"
+                )
+            }
+            let ecuMap = populateECUMap(messages)
+            connectionState = .connectedToVehicle
+            return OBDInfo(
+                vin: vin,
+                supportedPIDs: supportedPIDs,
+                obdProtocol: detectedProtocol,
+                ecuMap: ecuMap
             )
         }
-        let ecuMap = populateECUMap(messages)
-        connectionState = .connectedToVehicle
-        return OBDInfo(
-            vin: vin,
-            supportedPIDs: supportedPIDs,
-            obdProtocol: detectedProtocol,
-            ecuMap: ecuMap
-        )
     }
 
     // MARK: - Protocol Selection

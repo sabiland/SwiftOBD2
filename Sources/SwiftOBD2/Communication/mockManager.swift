@@ -66,7 +66,7 @@ class MOCKComm: CommProtocol {
                 guard
                     let value = OBDCommand.mockResponse(forCommand: subCommand)
                 else {
-                    return ["No Data"]
+                    return [Obd2Helper.obdServiceSpecificsResponseNoData]
 
                 }
                 response.append(value + " ")
@@ -159,7 +159,7 @@ class MOCKComm: CommProtocol {
                 case "RV":
                     return [String(Double.random(in: 12.0...14.0))]
                 default:
-                    return ["NO DATA"]
+                    return [Obd2Helper.obdServiceSpecificsResponseNoData]
                 }
             }()
             if ecuSettings.echo {
@@ -193,7 +193,7 @@ class MOCKComm: CommProtocol {
         } else {
             guard var response = OBDCommand.mockResponse(forCommand: command)
             else {
-                return ["No Data"]
+                return [Obd2Helper.obdServiceSpecificsResponseNoData]
             }
             response = command + response + "\r\n\r\n>"
             var lines =

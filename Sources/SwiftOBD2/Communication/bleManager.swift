@@ -490,13 +490,17 @@ class BLEManager: NSObject, CommProtocol {
             lines.removeLast()
             logger.debug("Response: \(lines)")
 
-            if sendMessageCompletion != nil {
-                if lines[0].uppercased().contains("NO DATA") {
+            if let sendMessageCompletion {
+                if let firstLine = lines.first,
+                    firstLine.containsCaseInsensitive(
+                        c: Obd2Helper.obdServiceSpecificsResponseNoData
+                    )
+                {
                     // SABI TWEAK
                     logger.info("SABI TWEAK: sendMessageCompletion?([], nil)")
-                    sendMessageCompletion?([], nil)  // ✅ empty array, no error
+                    sendMessageCompletion([], nil)
                 } else {
-                    sendMessageCompletion?(lines, nil)
+                    sendMessageCompletion(lines, nil)
                 }
             }
             buffer.removeAll()
