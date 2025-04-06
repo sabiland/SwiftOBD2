@@ -67,6 +67,14 @@ class BLEManager: NSObject, CommProtocol {
         $connectionState
     }
 
+    private var isBluetoothPoweredOn: Bool {
+        centralManager?.state == .poweredOn
+    }
+
+    var isReadyToUse: Bool {
+        isBluetoothPoweredOn && connectionState == .connectedToAdapter
+    }
+
     private var centralManager: CBCentralManager!
     private var ecuReadCharacteristic: CBCharacteristic?
     private var ecuWriteCharacteristic: CBCharacteristic?
@@ -97,6 +105,12 @@ class BLEManager: NSObject, CommProtocol {
     // MARK: - Central Manager Control Methods
 
     func startScanning(_ serviceUUIDs: [CBUUID]?) {
+        guard isBluetoothPoweredOn else {
+            logger.warning(
+                "startScanning skipped: Bluetooth is not powered on."
+            )
+            return
+        }
         let scanOption = [CBCentralManagerScanOptionAllowDuplicatesKey: true]
         centralManager?.scanForPeripherals(
             withServices: serviceUUIDs,
@@ -131,12 +145,14 @@ class BLEManager: NSObject, CommProtocol {
             connectionState = .disconnected
         case .unsupported:
             logger.error("This device does not support Bluetooth Low Energy.")
+            resetConfigure()
         case .unauthorized:
             logger.error(
                 "This app is not authorized to use Bluetooth Low Energy."
             )
         case .resetting:
             logger.warning("Bluetooth is resetting.")
+            resetConfigure()
         default:
             logger.error("Bluetooth is not powered on.")
             fatalError()
@@ -423,6 +439,11 @@ class BLEManager: NSObject, CommProtocol {
     {
         guard sendMessageCompletion == nil else {
             throw BLEManagerError.sendingMessagesInProgress
+        }
+
+        guard isBluetoothPoweredOn else {
+            logger.error("Bluetooth is off. Cannot send command.")
+            throw BLEManagerError.peripheralNotConnected
         }
 
         guard connectionState == .connectedToAdapter else {

@@ -212,6 +212,153 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
 
     var pidList: [OBDCommand] = []
 
+    /// Adds an OBD2 command to the list of commands to be requested.
+    public func addPID(_ pid: OBDCommand) {
+        pidList.append(pid)
+    }
+
+    /// Removes an OBD2 command from the list of commands to be requested.
+    public func removePID(_ pid: OBDCommand) {
+        pidList.removeAll { $0 == pid }
+    }
+
+    // 05042025
+    public func startContinuousUpdatesWithoutTimer(
+        _ pids: [OBDCommand],
+        parallel: Bool,
+        unit: MeasurementUnit = .metric,
+        delayBeforeNextUpdate: TimeInterval
+    ) -> AnyPublisher<[OBDCommand: MeasurementResult], Error> {
+        Deferred {
+            Future<[OBDCommand: MeasurementResult], Error> {
+                [weak self] promise in
+                guard let self = self else {
+                    promise(.failure(OBDServiceError.notConnectedToVehicle))
+                    return
+                }
+                Task(priority: .userInitiated) {
+                    if parallel {
+                        let results = await self.requestPIDsBetterParallel(
+                            pids,
+                            unit: unit
+                        )
+                        promise(.success(results))
+                    } else {
+                        let results = await self.requestPIDsBetter(
+                            pids,
+                            unit: unit
+                        )
+                        promise(.success(results))
+                    }
+                }
+            }
+        }
+        .flatMap {
+            result -> AnyPublisher<[OBDCommand: MeasurementResult], Error> in
+            Just(result)
+                .setFailureType(to: Error.self)
+                .append(
+                    Just(())
+                        .delay(
+                            for: .seconds(delayBeforeNextUpdate),
+                            scheduler: RunLoop.main
+                        )
+                        .flatMap { _ in
+                            self.startContinuousUpdatesWithoutTimer(
+                                pids,
+                                parallel: parallel,
+                                unit: unit,
+                                delayBeforeNextUpdate: delayBeforeNextUpdate
+                            )
+                        }
+                )
+                .eraseToAnyPublisher()
+        }
+        .eraseToAnyPublisher()
+    }
+
+    public func requestPIDsBetter(
+        _ commands: [OBDCommand],
+        unit: MeasurementUnit
+    ) async -> [OBDCommand: MeasurementResult] {
+        var results: [OBDCommand: MeasurementResult] = [:]
+
+        for command in commands {
+            do {
+                let response = try await self.sendCommandInternal(
+                    command.properties.command,
+                    retries: OBDService.retryCountRequestPIDs
+                )
+
+                guard
+                    let data = try self.elm327.canProtocol?.parse(response)
+                        .first?.data
+                else {
+                    continue
+                }
+
+                var batched = BatchedResponse(response: data, unit)
+                guard let measurement = batched.extractValue(command) else {
+                    continue
+                }
+
+                results[command] = measurement
+            } catch {
+                continue
+            }
+        }
+
+        return results
+    }
+
+    public func requestPIDsBetterParallel(
+        _ commands: [OBDCommand],
+        unit: MeasurementUnit
+    ) async -> [OBDCommand: MeasurementResult] {
+        var results: [OBDCommand: MeasurementResult] = [:]
+
+        await withTaskGroup(of: Optional<(OBDCommand, MeasurementResult)>.self)
+        { group in
+            for command in commands {
+                group.addTask { () -> (OBDCommand, MeasurementResult)? in
+                    do {
+                        let response = try await self.sendCommandInternal(
+                            command.properties.command,
+                            retries: OBDService.retryCountRequestPIDs
+                        )
+
+                        guard
+                            let data = try self.elm327.canProtocol?.parse(
+                                response
+                            ).first?.data
+                        else {
+                            return nil
+                        }
+
+                        var batched = BatchedResponse(response: data, unit)
+                        guard let measurement = batched.extractValue(command)
+                        else {
+                            return nil  // ✅ Prevent returning Optional inside tuple
+                        }
+
+                        return (command, measurement)  // ✅ Fully non-optional inside optional tuple
+
+                    } catch {
+                        return nil
+                    }
+                }
+            }
+
+            for await result in group {
+                if let (command, measurement) = result {
+                    results[command] = measurement
+                }
+            }
+        }
+
+        return results
+    }
+
     /// Sends an OBD2 command to the vehicle and returns a publisher with the result.
     /// - Parameter command: The OBD2 command to send.
     /// - Returns: A publisher with the measurement result.
@@ -247,21 +394,14 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
             .eraseToAnyPublisher()
     }
 
-    /// Adds an OBD2 command to the list of commands to be requested.
-    public func addPID(_ pid: OBDCommand) {
-        pidList.append(pid)
-    }
-
-    /// Removes an OBD2 command from the list of commands to be requested.
-    public func removePID(_ pid: OBDCommand) {
-        pidList.removeAll { $0 == pid }
-    }
-
     /// Sends an OBD2 command to the vehicle and returns the raw response.
     /// - Parameter command: The OBD2 command to send.
     /// - Returns: measurement result
     /// - Throws: Errors that might occur during the request process.
-    public func requestPIDs(_ commands: [OBDCommand], unit: MeasurementUnit)
+    public func requestPIDs(
+        _ commands: [OBDCommand],
+        unit: MeasurementUnit
+    )
         async throws -> [OBDCommand: MeasurementResult]
     {
         let response = try await sendCommandInternal(
