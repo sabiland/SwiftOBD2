@@ -232,23 +232,29 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         Deferred {
             Future<[OBDCommand: MeasurementResult], Error> {
                 [weak self] promise in
-                guard let self = self else {
-                    promise(.failure(OBDServiceError.notConnectedToVehicle))
+                guard let self else {
+                    deliverToMain(
+                        Result<[OBDCommand: MeasurementResult], Error>.failure(
+                            OBDServiceError.notConnectedToVehicle
+                        ),
+                        promise
+                    )
                     return
                 }
+
                 Task(priority: .userInitiated) {
+                    let results: [OBDCommand: MeasurementResult]
                     if parallel {
-                        let results = await self.requestPIDsBetterParallel(
+                        results = await self.requestPIDsBetterParallel(
                             pids,
                             unit: unit
                         )
-                        promise(.success(results))
                     } else {
-                        let results = await self.requestPIDsBetter(
-                            pids,
-                            unit: unit
-                        )
-                        promise(.success(results))
+                        results = await self.requestPIDsBetter(pids, unit: unit)
+                    }
+
+                    await MainActor.run {
+                        deliverToMain(.success(results), promise)
                     }
                 }
             }
