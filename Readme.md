@@ -8,143 +8,153 @@ NOTE: This is my fork/implementation. I inject custom `OneObdSetting` object int
 
 ```
 enum OneObdSettingType: Codable {
-  case connection
-  case sensorsSelectedPIDs
+    case connection
+    case sensorsSelectedPIDs
 }
 
 final class OneObdSetting: Codable {
-  static let delayNanosecondsTimeoutAdapterInitializationDefault: Int64 = 0
+    static let delayNanosecondsTimeoutAdapterInitializationDefault: Int64 = 0
 
-  let name: String
-  var delayNanosecondsTimeoutAdapterInitialization: Int64
-  var delayNanosecondsWifiRetryCommand: Int64
-  var delayNanosecondsTimeoutDetectProtocolAutomatically: Int64
-  var wifiIp: String
-  var wifiPort: Int
-  var connectionTimeoutSeconds: CGFloat
-  var customData: String
-  var obdProtocol: PROTOCOL?
-  var obdConnectionName: String?
-  // 20032025
-  var oneSecondNanoseconds: Int64 = 1_000_000_000
-  var delayNanosecondsBTPeripherals: Int64
-  var bt: Bool
-  var wifi: Bool {
-    !bt
-  }
-  // Timeout factors
-  var timeoutMultiplyCustomTimeouts: CGFloat = 2
-  // 21032025
-  var timeoutSecondsSendCommandBT: CGFloat
-  // 26032025
-  var settingType: OneObdSettingType
-  var lastUsedSensorsPIDs = [PIDData]()
-  // 27032025
-  var sensorsMonitoringUnit: MeasurementUnit = .metric
-  var sensorsMonitoringInterval: TimeInterval = 0.3
+    let name: String
+    var delayNanosecondsTimeoutAdapterInitialization: Int64
+    var delayNanosecondsWifiRetryCommand: Int64
+    var delayNanosecondsTimeoutDetectProtocolAutomatically: Int64
+    var wifiIp: String
+    var wifiPort: Int
+    var connectionTimeoutSeconds: CGFloat
+    var customData: String
+    var obdProtocol: PROTOCOL?
+    var obdConnectionName: String?
+    // 20032025
+    var oneSecondNanoseconds: Int64 = 1_000_000_000
+    var delayNanosecondsBTPeripherals: Int64
+    var bt: Bool
+    var wifi: Bool {
+        !bt
+    }
+    // Timeout factors
+    var timeoutMultiplyCustomTimeouts: CGFloat = 2
+    // 21032025
+    var timeoutSecondsSendCommandBT: CGFloat
+    // 26032025
+    var settingType: OneObdSettingType
+    var lastUsedSensorsPIDs = [PIDData]()
+    // 27032025
+    var sensorsMonitoringUnit: MeasurementUnit = .metric
+    var sensorsMonitoringDelayBeforeNextUpdate: TimeInterval = 0.3
 
-  convenience init(
-    name: String,
-    lastUsedSensorsPIDs: [PIDData]
-  ) {
-    self.init(
-      name: name,
-      delayNanosecondsTimeoutAdapterInitialization: Self
-        .delayNanosecondsTimeoutAdapterInitializationDefault,
-      delayNanosecondsTimeoutDetectProtocolAutomatically: 0,
-      connectionTimeoutSeconds: 0,
-      bt: false
-    )
-    self.lastUsedSensorsPIDs = lastUsedSensorsPIDs
-    self.settingType = .sensorsSelectedPIDs
-  }
+    // 05042025
+    var sensorsMonitoringAutoRetryCount: Int = 10
+    var sensorsMonitoringAutoRetryDelay: TimeInterval = 0.5
+    var sensorsMonitoringAutoRetryDelayFactor: Double = 1.5
+    var sensorsMonitoringAutoRetryDelayMax: Double = 5.0
+    // 09042025
+    var delayOptimizationSafetyFactor: CGFloat = 1.25
+    var delayOptimizationCap: CGFloat = 1.5
+    var delayOptimizationLowLimit: CGFloat = 0.05
 
-  // 26032025
-  func updateLastMonitoredPIDs(lastUsedSensorsPIDs: [PIDData]) {
-    self.lastUsedSensorsPIDs = lastUsedSensorsPIDs
-    // STORE
-    OilerHelper.masterOilerSettings.storeOilerSettings()
-  }
+    convenience init(
+        name: String,
+        lastUsedSensorsPIDs: [PIDData]
+    ) {
+        self.init(
+            name: name,
+            delayNanosecondsTimeoutAdapterInitialization: Self
+                .delayNanosecondsTimeoutAdapterInitializationDefault,
+            delayNanosecondsTimeoutDetectProtocolAutomatically: 0,
+            connectionTimeoutSeconds: 0,
+            bt: false
+        )
+        self.lastUsedSensorsPIDs = lastUsedSensorsPIDs
+        self.settingType = .sensorsSelectedPIDs
+    }
 
-  init(
-    name: String,
-    delayNanosecondsTimeoutAdapterInitialization: Int64,
-    delayNanosecondsTimeoutDetectProtocolAutomatically: Int64,
-    connectionTimeoutSeconds: CGFloat,
-    bt: Bool,
-    delayNanosecondsWifiRetryCommand: Int64 = 0,
-    delayNanosecondsBTPeripherals: Int64 = 0,
-    wifiIp: String = String(),
-    wifiPort: Int = 0,
-    timeoutSecondsSendCommandBT: CGFloat = 3,
-    settingType: OneObdSettingType = .connection
-  ) {
-    self.name = name
-    self.delayNanosecondsTimeoutAdapterInitialization =
-      delayNanosecondsTimeoutAdapterInitialization
-    self.delayNanosecondsWifiRetryCommand =
-      delayNanosecondsWifiRetryCommand
-    self.delayNanosecondsTimeoutDetectProtocolAutomatically =
-      delayNanosecondsTimeoutDetectProtocolAutomatically
-    self.connectionTimeoutSeconds = connectionTimeoutSeconds
-    self.wifiIp = wifiIp.fullTrim()
-    self.wifiPort = wifiPort
-    self.customData = "\(self.wifiIp):\(self.wifiPort)"
-    self.delayNanosecondsBTPeripherals = delayNanosecondsBTPeripherals
-    self.bt = bt
-    self.timeoutSecondsSendCommandBT = timeoutSecondsSendCommandBT
-    self.settingType = settingType
-  }
+    // 26032025
+    func updateLastMonitoredPIDs(lastUsedSensorsPIDs: [PIDData]) {
+        self.lastUsedSensorsPIDs = lastUsedSensorsPIDs
+        // STORE
+        OilerHelper.masterOilerSettings.storeOilerSettings()
+    }
 
-  // 31032025
-  func updateConnectionOptimizedValues(
-    delayNanosecondsTimeoutAdapterInitialization: Int64
-  ) {
-    self.delayNanosecondsTimeoutAdapterInitialization =
-      delayNanosecondsTimeoutAdapterInitialization
-    // STORE
-    OilerHelper.masterOilerSettings.storeOilerSettings()
-  }
+    init(
+        name: String,
+        delayNanosecondsTimeoutAdapterInitialization: Int64,
+        delayNanosecondsTimeoutDetectProtocolAutomatically: Int64,
+        connectionTimeoutSeconds: CGFloat,
+        bt: Bool,
+        delayNanosecondsWifiRetryCommand: Int64 = 0,
+        delayNanosecondsBTPeripherals: Int64 = 0,
+        wifiIp: String = String(),
+        wifiPort: Int = 0,
+        timeoutSecondsSendCommandBT: CGFloat = 3,
+        settingType: OneObdSettingType = .connection
+    ) {
+        self.name = name
+        self.delayNanosecondsTimeoutAdapterInitialization =
+            delayNanosecondsTimeoutAdapterInitialization
+        self.delayNanosecondsWifiRetryCommand =
+            delayNanosecondsWifiRetryCommand
+        self.delayNanosecondsTimeoutDetectProtocolAutomatically =
+            delayNanosecondsTimeoutDetectProtocolAutomatically
+        self.connectionTimeoutSeconds = connectionTimeoutSeconds
+        self.wifiIp = wifiIp.fullTrim()
+        self.wifiPort = wifiPort
+        self.customData = "\(self.wifiIp):\(self.wifiPort)"
+        self.delayNanosecondsBTPeripherals = delayNanosecondsBTPeripherals
+        self.bt = bt
+        self.timeoutSecondsSendCommandBT = timeoutSecondsSendCommandBT
+        self.settingType = settingType
+    }
 
-  // 30032025
-  func resetAllConnectionSettings() {
-    // Reset delays/timeouts
-    self.delayNanosecondsTimeoutAdapterInitialization =
-      Self.delayNanosecondsTimeoutAdapterInitializationDefault
-    // Reset obd protocol
-    self.obdProtocol = nil
-    // STORE
-    OilerHelper.masterOilerSettings.storeOilerSettings()
-  }
+    // 31032025
+    func updateConnectionOptimizedValues(
+        delayNanosecondsTimeoutAdapterInitialization: Int64
+    ) {
+        self.delayNanosecondsTimeoutAdapterInitialization =
+            delayNanosecondsTimeoutAdapterInitialization
+        // STORE
+        OilerHelper.masterOilerSettings.storeOilerSettings()
+    }
 
-  // 11032025
-  func resetWifiAndPort() {
-    updateWifiIpAndPort(
-      ipAndPort: "\(Obd2Helper.mainIp):\(Obd2Helper.mainPort)"
-    )
-  }
+    // 30032025
+    func resetAllConnectionSettings() {
+        // Reset delays/timeouts
+        self.delayNanosecondsTimeoutAdapterInitialization =
+            Self.delayNanosecondsTimeoutAdapterInitializationDefault
+        // Reset obd protocol
+        self.obdProtocol = nil
+        // STORE
+        OilerHelper.masterOilerSettings.storeOilerSettings()
+    }
 
-  func updateWifiIpAndPort(ipAndPort: String) {
-    let pair = ipAndPort.generateIpAndPort()
-    self.wifiIp = pair.ip
-    self.wifiPort = Int(pair.port)!
-    self.customData = "\(self.wifiIp):\(self.wifiPort)"
-    // STORE
-    OilerHelper.masterOilerSettings.storeOilerSettings()
-  }
+    // 11032025
+    func resetWifiAndPort() {
+        updateWifiIpAndPort(
+            ipAndPort: "\(Obd2Helper.mainIp):\(Obd2Helper.mainPort)"
+        )
+    }
 
-  func updateObdProtocol(obdProtocol: PROTOCOL?) {
-    self.obdProtocol = obdProtocol
-    // STORE
-    OilerHelper.masterOilerSettings.storeOilerSettings()
-  }
+    func updateWifiIpAndPort(ipAndPort: String) {
+        let pair = ipAndPort.generateIpAndPort()
+        self.wifiIp = pair.ip
+        self.wifiPort = Int(pair.port)!
+        self.customData = "\(self.wifiIp):\(self.wifiPort)"
+        // STORE
+        OilerHelper.masterOilerSettings.storeOilerSettings()
+    }
 
-  // 12032025
-  func updateObdConnectionName(connectionName: String?) {
-    self.obdConnectionName = connectionName
-    // STORE
-    OilerHelper.masterOilerSettings.storeOilerSettings()
-  }
+    func updateObdProtocol(obdProtocol: PROTOCOL?) {
+        self.obdProtocol = obdProtocol
+        // STORE
+        OilerHelper.masterOilerSettings.storeOilerSettings()
+    }
+
+    // 12032025
+    func updateObdConnectionName(connectionName: String?) {
+        self.obdConnectionName = connectionName
+        // STORE
+        OilerHelper.masterOilerSettings.storeOilerSettings()
+    }
 
 }
 ```

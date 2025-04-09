@@ -137,6 +137,8 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
     /// - Returns: Information about the connected vehicle (`OBDInfo`).
     /// - Throws: Errors that might occur during the connection process.
     public func startConnection(lastObdInfo: OBDInfo?) async throws -> OBDInfo {
+        // 09042025 !!!
+        clearAllDataNecessaryForCleanStartingConnectionProcess()
         let preferedProtocol: PROTOCOL? = oilerObdSetting.obdProtocol
         let timeout: TimeInterval = oilerObdSetting.connectionTimeoutSeconds
         do {
@@ -222,12 +224,19 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         pidList.removeAll { $0 == pid }
     }
 
+    private func clearAllDataNecessaryForCleanStartingConnectionProcess() {
+        // !!!
+        self.optimizedContinuousUpdatesDelay = nil
+    }
+
+    private var optimizedContinuousUpdatesDelay: TimeInterval?
     // 05042025
     public func startContinuousUpdatesWithoutTimer(
         _ pids: [OBDCommand],
         parallel: Bool,
         unit: MeasurementUnit = .metric,
-        delayBeforeNextUpdate: TimeInterval
+        delayBeforeNextUpdate: TimeInterval,
+        dynamicOptimize: Bool
     ) -> AnyPublisher<[OBDCommand: MeasurementResult], Error> {
         Deferred {
             Future<[OBDCommand: MeasurementResult], Error> {
@@ -243,6 +252,16 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                 }
 
                 Task(priority: .userInitiated) {
+                    let startTime = CFAbsoluteTimeGetCurrent()  // ✅ START MEASURING
+
+                    // NOTE: SET IT IF NIL ---> SO ALL RECURSIVE CALLS WILL BE CALLED WITH THIS !!!
+                    // NOTE: SET IT IF NIL ---> SO ALL RECURSIVE CALLS WILL BE CALLED WITH THIS !!!
+                    // NOTE: SET IT IF NIL ---> SO ALL RECURSIVE CALLS WILL BE CALLED WITH THIS !!!
+                    if self.optimizedContinuousUpdatesDelay == nil {
+                        self.optimizedContinuousUpdatesDelay =
+                            delayBeforeNextUpdate
+                    }
+
                     let results: [OBDCommand: MeasurementResult]
                     if parallel {
                         results = await self.requestPIDsBetterParallel(
@@ -253,6 +272,21 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                         results = await self.requestPIDsBetter(pids, unit: unit)
                     }
 
+                    let elapsed = CFAbsoluteTimeGetCurrent() - startTime  // ✅ STOP + CALCULATE
+                    if dynamicOptimize {
+                        let clamped = min(
+                            elapsed
+                                * self.oilerObdSetting
+                                .delayOptimizationSafetyFactor,
+                            self.oilerObdSetting.delayOptimizationCap
+                        )  // cap at 1.5s
+                        self.optimizedContinuousUpdatesDelay = max(
+                            self.oilerObdSetting.delayOptimizationLowLimit,
+                            clamped
+                        )
+                    }
+
+                    // DELIVER RESULTS TO MAIN
                     await MainActor.run {
                         deliverToMain(.success(results), promise)
                     }
@@ -261,12 +295,14 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         }
         .flatMap {
             result -> AnyPublisher<[OBDCommand: MeasurementResult], Error> in
-            Just(result)
+            let effectiveDelay =
+                self.optimizedContinuousUpdatesDelay ?? delayBeforeNextUpdate
+            return Just(result)
                 .setFailureType(to: Error.self)
                 .append(
                     Just(())
                         .delay(
-                            for: .seconds(delayBeforeNextUpdate),
+                            for: .seconds(effectiveDelay),
                             scheduler: RunLoop.main
                         )
                         .flatMap { _ in
@@ -274,7 +310,8 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                                 pids,
                                 parallel: parallel,
                                 unit: unit,
-                                delayBeforeNextUpdate: delayBeforeNextUpdate
+                                delayBeforeNextUpdate: effectiveDelay,
+                                dynamicOptimize: dynamicOptimize
                             )
                         }
                 )
