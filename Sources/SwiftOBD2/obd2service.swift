@@ -252,49 +252,53 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                 }
 
                 Task(priority: .userInitiated) {
-                    let startTime = CFAbsoluteTimeGetCurrent()  // ✅ START MEASURING
+                    let startTime = CFAbsoluteTimeGetCurrent()
 
-                    // NOTE: SET IT IF NIL ---> SO ALL RECURSIVE CALLS WILL BE CALLED WITH THIS !!!
-                    // NOTE: SET IT IF NIL ---> SO ALL RECURSIVE CALLS WILL BE CALLED WITH THIS !!!
-                    // NOTE: SET IT IF NIL ---> SO ALL RECURSIVE CALLS WILL BE CALLED WITH THIS !!!
                     if self.optimizedContinuousUpdatesDelay == nil {
                         self.optimizedContinuousUpdatesDelay =
                             delayBeforeNextUpdate
                     }
 
-                    let results: [OBDCommand: MeasurementResult]
-                    if parallel {
-                        results = await self.requestPIDsBetterParallel(
-                            pids,
-                            unit: unit
+                    let results =
+                        parallel
+                        ? await self.requestPIDsBetterParallel(pids, unit: unit)
+                        : await self.requestPIDsBetter(pids, unit: unit)
+
+                    if results.isEmpty {
+                        deliverToMain(
+                            .failure(OBDServiceError.notConnectedToVehicle),
+                            promise
                         )
-                    } else {
-                        results = await self.requestPIDsBetter(pids, unit: unit)
+                        return
                     }
 
-                    let elapsed = CFAbsoluteTimeGetCurrent() - startTime  // ✅ STOP + CALCULATE
+                    let elapsed = CFAbsoluteTimeGetCurrent() - startTime
                     if dynamicOptimize {
                         let clamped = min(
                             elapsed
                                 * self.oilerObdSetting
                                 .delayOptimizationSafetyFactor,
                             self.oilerObdSetting.delayOptimizationCap
-                        )  // cap at 1.5s
+                        )
                         self.optimizedContinuousUpdatesDelay = max(
                             self.oilerObdSetting.delayOptimizationLowLimit,
                             clamped
                         )
                     }
 
-                    // DELIVER RESULTS TO MAIN
-                    await MainActor.run {
-                        deliverToMain(.success(results), promise)
-                    }
+                    deliverToMain(.success(results), promise)
                 }
             }
         }
         .flatMap {
-            result -> AnyPublisher<[OBDCommand: MeasurementResult], Error> in
+            [weak self] result -> AnyPublisher<
+                [OBDCommand: MeasurementResult], Error
+            > in
+            guard let self else {
+                // clean exit when self is nil
+                return Empty().eraseToAnyPublisher()
+            }
+
             let effectiveDelay =
                 self.optimizedContinuousUpdatesDelay ?? delayBeforeNextUpdate
             return Just(result)
