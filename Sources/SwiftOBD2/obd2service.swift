@@ -659,30 +659,38 @@ public struct MeasurementResult: Equatable {
     public let unit: Unit
 }
 
-public func getVINInfo(vin: String) async throws -> VINResults {
-    let endpoint =
-        "https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/\(vin)?format=json"
-
-    guard let url = URL(string: endpoint) else {
-        throw URLError(.badURL)
-    }
-
-    let (data, response) = try await URLSession.shared.data(from: url)
-
-    guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-        throw URLError(.badServerResponse)
-    }
-
-    let decoder = JSONDecoder()
-    let decoded = try decoder.decode(VINResults.self, from: data)
-    return decoded
-}
-
 public struct VINResults: Codable {
     public let Results: [VINInfo]
 }
 
 public struct VINInfo: Codable, Hashable {
+
+    public static func getVINInfo(vin: String, timeout: TimeInterval = 5)
+        async throws -> VINResults
+    {
+        let endpoint =
+            "https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/\(vin)?format=json"
+
+        guard let url = URL(string: endpoint) else {
+            throw URLError(.badURL)
+        }
+
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = timeout
+        config.timeoutIntervalForResource = timeout
+        let session = URLSession(configuration: config)
+
+        let (data, response) = try await session.data(from: url)
+
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw URLError(.badServerResponse)
+        }
+
+        let decoder = JSONDecoder()
+        let decoded = try decoder.decode(VINResults.self, from: data)
+        return decoded
+    }
+
     public let ABS: String?
     public let ActiveSafetySysNote: String?
     public let AdaptiveCruiseControl: String?
@@ -837,4 +845,39 @@ public struct VINInfo: Codable, Hashable {
     public let WheelieMitigation: String?
     public let Wheels: String?
     public let Windows: String?
+}
+
+extension VINInfo {
+    public var displayableItems: [VINInfoDisplayItem] {
+        let mirror = Mirror(reflecting: self)
+
+        return mirror.children.compactMap { child in
+            guard let key = child.label else { return nil }
+            if let value = child.value as? String, !value.isEmpty {
+                return VINInfoDisplayItem(
+                    label: key,
+                    value: value
+                )
+            }
+            return nil
+        }
+    }
+}
+
+public struct VINInfoDisplayItem: Identifiable {
+    public let id = UUID()
+    public let label: String
+    public let value: String
+}
+
+extension String {
+    public func camelCaseToWords() -> String {
+        return unicodeScalars.dropFirst().reduce(String(prefix(1))) {
+            CharacterSet.uppercaseLetters.contains($1)
+                ? $0 + " " + String($1)
+                : $0 + String($1)
+        }
+        .replacingOccurrences(of: "_", with: " ")
+        .capitalized
+    }
 }
