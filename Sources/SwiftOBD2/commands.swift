@@ -107,9 +107,27 @@ public enum OBDCommand: Codable, Hashable, Comparable {
         case ATAT1
         case ATSTFF
         case ATDPN
+        case ATS0
+        case ATI
 
         public var properties: CommandProperties {
             switch self {
+            case .ATS0:
+                return CommandProperties(
+                    "ATS0",
+                    "Spaces Off",
+                    5,
+                    .none,
+                    shortDescription: "Spaces Off"
+                )
+            case .ATI:
+                return CommandProperties(
+                    "ATI",
+                    "Adapter Identifier",
+                    5,
+                    .none,
+                    shortDescription: "Adapter Identifier"
+                )
             case .ATD:
                 return CommandProperties(
                     "ATD",

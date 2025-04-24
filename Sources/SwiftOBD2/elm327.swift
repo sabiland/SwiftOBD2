@@ -198,7 +198,10 @@ class ELM327 {
     {
         self.logger.info("detectProtocolAutomatically")
 
-        _ = try await okResponse("ATSP0", oilerObdSetting: oilerObdSetting)
+        _ = try await okResponse(
+            OBDCommand.Protocols.ATSP0.properties.command,
+            oilerObdSetting: oilerObdSetting
+        )
 
         let delay: UInt64 = UInt64(
             oilerObdSetting
@@ -206,10 +209,13 @@ class ELM327 {
         )
 
         try? await Task.sleep(nanoseconds: delay)
-        _ = try await sendCommand("0100", oilerObdSetting: oilerObdSetting)
+        _ = try await sendCommand(
+            OBDCommand.Mode1.pidsA.properties.command,
+            oilerObdSetting: oilerObdSetting
+        )
 
         let obdProtocolNumber = try await sendCommand(
-            "ATDPN",
+            OBDCommand.General.ATDPN.properties.command,
             oilerObdSetting: oilerObdSetting
         )
 
@@ -282,7 +288,7 @@ class ELM327 {
 
         // Now send the 0100 command and check for a valid response
         let response = try? await sendCommand(
-            "0100",
+            OBDCommand.Mode1.pidsA.properties.command,
             retries: OBDService.retryCountSendCommand,
             oilerObdSetting: oilerObdSetting
         )
@@ -337,37 +343,67 @@ class ELM327 {
         logger.info("Initializing ELM327 adapter...")
 
         let delay: UInt64 = UInt64(
-            oilerObdSetting
-                .delayNanosecondsTimeoutAdapterInitialization
+            oilerObdSetting.delayNanosecondsTimeoutAdapterInitialization
         )
 
         do {
-            // Initializing the adapter
-            _ = try await sendCommand("ATZ", oilerObdSetting: oilerObdSetting)  // Reset adapter
-            try await Task.sleep(nanoseconds: delay)
-            _ = try await okResponse("ATE0", oilerObdSetting: oilerObdSetting)  // Echo off
-            try await Task.sleep(nanoseconds: delay)
-            _ = try await okResponse("ATL0", oilerObdSetting: oilerObdSetting)  // Linefeeds off
-            try await Task.sleep(nanoseconds: delay)
-            _ = try await okResponse("ATS0", oilerObdSetting: oilerObdSetting)  // Spaces off
-            try await Task.sleep(nanoseconds: delay)
-            _ = try await okResponse("ATH1", oilerObdSetting: oilerObdSetting)  // Headers on
+            // ⚡ 1. Reset the adapter fully
+            _ = try await sendCommand(
+                OBDCommand.General.ATZ.properties.command,
+                oilerObdSetting: oilerObdSetting
+            )
             try await Task.sleep(nanoseconds: delay)
 
-            // If a preferred protocol is provided, skip ATSP0
+            // ⚡ 2. Disable all extra text formatting
+            _ = try await okResponse(
+                OBDCommand.General.ATE0.properties.command,
+                oilerObdSetting: oilerObdSetting
+            )  // echo off
+            try await Task.sleep(nanoseconds: delay)
+            _ = try await okResponse(
+                OBDCommand.General.ATL0.properties.command,
+                oilerObdSetting: oilerObdSetting
+            )  // linefeeds off
+            try await Task.sleep(nanoseconds: delay)
+            _ = try await okResponse(
+                OBDCommand.General.ATS0.properties.command,
+                oilerObdSetting: oilerObdSetting
+            )  // spaces off
+            try await Task.sleep(nanoseconds: delay)
+
+            // ⚡ 3. Optional: Enable headers only if your parser needs them
+            _ = try await okResponse(
+                OBDCommand.General.ATH0.properties.command,
+                oilerObdSetting: oilerObdSetting
+            )
+            try await Task.sleep(nanoseconds: delay)
+
+            // ⚡ 4. Adaptive protocol setup
             if let preferredProtocol = preferredProtocol {
-                // Log the protocol if provided
                 logger.info(
                     "Using preferred protocol: \(preferredProtocol.description)"
                 )
-            } else {
-                // If no preferred protocol, use ATSP0 to set the protocol to automatic
                 _ = try await okResponse(
-                    "ATSP0",
+                    preferredProtocol.cmd,
                     oilerObdSetting: oilerObdSetting
-                )  // Set protocol to automatic
+                )
+                try await Task.sleep(nanoseconds: delay)
+            } else {
+                _ = try await okResponse(
+                    OBDCommand.Protocols.ATSP0.properties.command,
+                    oilerObdSetting: oilerObdSetting
+                )
                 try await Task.sleep(nanoseconds: delay)
             }
+
+            // ⚡ 5. Confirm adapter is ready (optional sanity)
+            let adapterVersion = try await sendCommand(
+                OBDCommand.General.ATI.properties.command,
+                oilerObdSetting: oilerObdSetting
+            )
+            logger.info(
+                "Adapter Version: \(adapterVersion.joined(separator: " "))"
+            )
 
             logger.info("ELM327 adapter initialized successfully.")
         } catch {

@@ -665,6 +665,12 @@ public struct VINResults: Codable {
 
 public struct VINInfo: Codable, Hashable {
 
+    static func fetchVINInfoGeneric(vin: String) async throws -> VINResults {
+        let url =
+            "https://vpic.nhtsa.dot.gov/api/vehicles/decodevinvalues/\(vin)?format=json"
+        return try await URLHelper.fetchDecoded(from: url, as: VINResults.self)
+    }
+
     public static func getVINInfo(vin: String, timeout: TimeInterval = 5)
         async throws -> VINResults
     {
