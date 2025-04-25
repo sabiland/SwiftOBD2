@@ -891,13 +891,17 @@ struct StringDecoder: Decoder {
             return .failure(.decodingFailed(reason: "Failed to decode string"))
         }
 
-        string =
-            string
-            .replacingOccurrences(
-                of: "[^a-zA-Z0-9]",
-                with: "",
-                options: .regularExpression
-            )
+        // Remove control characters and non-printables (e.g., nulls, padding)
+        string = string.filter { $0.isASCII && $0.isPrintable }
+
+        // ORIGINAL
+        //        string =
+        //            string
+        //            .replacingOccurrences(
+        //                of: "[^a-zA-Z0-9]",
+        //                with: "",
+        //                options: .regularExpression
+        //            )
 
         return .success(.stringResult(string))
     }

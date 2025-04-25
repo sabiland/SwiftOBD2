@@ -342,9 +342,19 @@ class ELM327 {
     ) async throws {
         logger.info("Initializing ELM327 adapter...")
 
-        let delay: UInt64 = UInt64(
+        let baseDelay: UInt64 = UInt64(
             oilerObdSetting.delayNanosecondsTimeoutAdapterInitialization
         )
+
+        let delayReset = UInt64(Double(baseDelay) * oilerObdSetting.multReset)
+        let delayEcho = UInt64(Double(baseDelay) * oilerObdSetting.multEcho)
+        let delayHeaders = UInt64(
+            Double(baseDelay) * oilerObdSetting.multHeaders
+        )
+        let delayProtocolSet = UInt64(
+            Double(baseDelay) * oilerObdSetting.multProtocolSet
+        )
+        let delayATI = UInt64(Double(baseDelay) * oilerObdSetting.multATI)
 
         do {
             // ⚡ 1. Reset the adapter fully
@@ -352,31 +362,33 @@ class ELM327 {
                 OBDCommand.General.ATZ.properties.command,
                 oilerObdSetting: oilerObdSetting
             )
-            try await Task.sleep(nanoseconds: delay)
+            try await Task.sleep(nanoseconds: delayReset)
 
             // ⚡ 2. Disable all extra text formatting
             _ = try await okResponse(
                 OBDCommand.General.ATE0.properties.command,
                 oilerObdSetting: oilerObdSetting
             )  // echo off
-            try await Task.sleep(nanoseconds: delay)
+            try await Task.sleep(nanoseconds: delayEcho)
+
             _ = try await okResponse(
                 OBDCommand.General.ATL0.properties.command,
                 oilerObdSetting: oilerObdSetting
             )  // linefeeds off
-            try await Task.sleep(nanoseconds: delay)
+            try await Task.sleep(nanoseconds: delayEcho)
+
             _ = try await okResponse(
                 OBDCommand.General.ATS0.properties.command,
                 oilerObdSetting: oilerObdSetting
             )  // spaces off
-            try await Task.sleep(nanoseconds: delay)
+            try await Task.sleep(nanoseconds: delayEcho)
 
             // ⚡ 3. Optional: Enable headers only if your parser needs them
             _ = try await okResponse(
-                OBDCommand.General.ATH0.properties.command,
+                OBDCommand.General.ATH1.properties.command,
                 oilerObdSetting: oilerObdSetting
             )
-            try await Task.sleep(nanoseconds: delay)
+            try await Task.sleep(nanoseconds: delayHeaders)
 
             // ⚡ 4. Adaptive protocol setup
             if let preferredProtocol = preferredProtocol {
@@ -387,13 +399,13 @@ class ELM327 {
                     preferredProtocol.cmd,
                     oilerObdSetting: oilerObdSetting
                 )
-                try await Task.sleep(nanoseconds: delay)
+                try await Task.sleep(nanoseconds: delayProtocolSet)
             } else {
                 _ = try await okResponse(
                     OBDCommand.Protocols.ATSP0.properties.command,
                     oilerObdSetting: oilerObdSetting
                 )
-                try await Task.sleep(nanoseconds: delay)
+                try await Task.sleep(nanoseconds: delayProtocolSet)
             }
 
             // ⚡ 5. Confirm adapter is ready (optional sanity)
@@ -401,10 +413,11 @@ class ELM327 {
                 OBDCommand.General.ATI.properties.command,
                 oilerObdSetting: oilerObdSetting
             )
+            try await Task.sleep(nanoseconds: delayATI)
+
             logger.info(
                 "Adapter Version: \(adapterVersion.joined(separator: " "))"
             )
-
             logger.info("ELM327 adapter initialized successfully.")
         } catch {
             logger.error(
@@ -526,8 +539,11 @@ class ELM327 {
         try await comm.scanForPeripherals(oilerObdSetting: oilerObdSetting)
     }
 
+    // SABI TWEAK
+    // 25042025 - ChatGpt improved
     func requestVin(oilerObdSetting: OneObdSetting) async -> String? {
         let command = OBDCommand.Mode9.VIN
+
         guard
             let vinResponse = try? await sendCommand(
                 command.properties.command,
@@ -537,22 +553,34 @@ class ELM327 {
             return nil
         }
 
-        guard let data = try? canProtocol?.parse(vinResponse).first?.data,
-            var vinString = String(bytes: data, encoding: .utf8)
-        else {
+        guard let parsed = try? canProtocol?.parse(vinResponse) else {
             return nil
         }
 
-        vinString =
-            vinString
-            .replacingOccurrences(
-                of: "[^a-zA-Z0-9]",
-                with: "",
-                options: .regularExpression
-            )
+        // Flatten all bytes
+        let vinBytes = parsed.compactMap { $0.data }.flatMap { $0 }
+
+        // Drop metadata bytes if present
+        let cleanBytes =
+            vinBytes.count > 2 ? vinBytes.dropFirst(2) : vinBytes[...]
+
+        // Extract VIN payload: only 0–9 and A–Z ASCII, exactly 17 characters
+        let vinPayload: [UInt8] = Array(
+            cleanBytes
+                .filter {
+                    (0x30...0x39).contains($0) || (0x41...0x5A).contains($0)
+                }
+                .prefix(17)
+        )
+
+        guard vinPayload.count == 17 else { return nil }
+        guard let vinString = String(bytes: vinPayload, encoding: .utf8) else {
+            return nil
+        }
 
         return vinString
     }
+
 }
 
 extension ELM327 {
