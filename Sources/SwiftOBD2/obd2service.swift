@@ -162,6 +162,21 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
         }
     }
 
+    // SABI TWEAK 27042025
+    public func startConnectionTryOnly() async throws {
+        let timeout: TimeInterval = oilerObdSetting.connectionTimeoutSeconds
+        do {
+            try await elm327.connectToAdapter(
+                timeout: timeout,
+                oilerObdSetting: oilerObdSetting
+            )
+        } catch {
+            throw OBDServiceError.adapterConnectionFailed(
+                underlyingError: error
+            )
+        }
+    }
+
     /// Initializes communication with the vehicle and retrieves vehicle information.
     ///
     /// - Parameter preferedProtocol: The optional OBD2 protocol to use (if supported).
