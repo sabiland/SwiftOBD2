@@ -573,7 +573,7 @@ class ELM327 {
                 .prefix(17)
         )
 
-        guard vinPayload.count == 17 else { return nil }
+        guard vinPayload.count == Obd2Helper.VINLength else { return nil }
         guard let vinString = String(bytes: vinPayload, encoding: .utf8) else {
             return nil
         }
