@@ -146,14 +146,18 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
                 timeout: timeout,
                 oilerObdSetting: oilerObdSetting
             )
-            try await elm327.adapterInitialization(
+            let adapterVersion = try await elm327.adapterInitialization(
                 preferredProtocol: preferedProtocol,
                 oilerObdSetting: oilerObdSetting
             )
-            let obdInfo = try await initializeVehicle(
+            var obdInfo = try await initializeVehicle(
                 preferedProtocol,
                 lastObdInfo: lastObdInfo
             )
+            // 30042025
+            obdInfo.adapterVersion = adapterVersion.sanitizedOBDResponse()
+            // !!! 30042025
+            Vibration.vibrateDefault()
             return obdInfo
         } catch {
             throw OBDServiceError.adapterConnectionFailed(
@@ -164,12 +168,16 @@ public class OBDService: ObservableObject, OBDServiceDelegate {
 
     // SABI TWEAK 27042025
     public func startConnectionTryOnly() async throws {
+        // 30042025
+        clearAllDataNecessaryForCleanStartingConnectionProcess()
         let timeout: TimeInterval = oilerObdSetting.connectionTimeoutSeconds
         do {
             try await elm327.connectToAdapter(
                 timeout: timeout,
                 oilerObdSetting: oilerObdSetting
             )
+            // !!! 30042025
+            Vibration.vibrateDefault()
         } catch {
             throw OBDServiceError.adapterConnectionFailed(
                 underlyingError: error

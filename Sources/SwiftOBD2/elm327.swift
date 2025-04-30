@@ -339,7 +339,7 @@ class ELM327 {
     func adapterInitialization(
         preferredProtocol: PROTOCOL? = nil,
         oilerObdSetting: OneObdSetting
-    ) async throws {
+    ) async throws -> String {
         logger.info("Initializing ELM327 adapter...")
 
         let baseDelay: UInt64 = UInt64(
@@ -414,11 +414,12 @@ class ELM327 {
                 oilerObdSetting: oilerObdSetting
             )
             try await Task.sleep(nanoseconds: delayATI)
-
+            let av = adapterVersion.joined(separator: " ")
             logger.info(
-                "Adapter Version: \(adapterVersion.joined(separator: " "))"
+                "Adapter Version: \(av)"
             )
             logger.info("ELM327 adapter initialized successfully.")
+            return av
         } catch {
             logger.error(
                 "Adapter initialization failed: \(error.localizedDescription)"
@@ -523,7 +524,8 @@ class ELM327 {
                 logger.error("Failed to decode DTC: \(error)")
             }
         }
-
+        // !!! 30042025
+        Vibration.vibrateDefault()
         return dtcs
     }
 
@@ -533,6 +535,8 @@ class ELM327 {
             command.properties.command,
             oilerObdSetting: oilerObdSetting
         )
+        // !!! 30042025
+        Vibration.vibrateDefault()
     }
 
     func scanForPeripherals(oilerObdSetting: OneObdSetting) async throws {
@@ -821,4 +825,6 @@ public struct OBDInfo: Codable, Hashable {
     public var supportedPIDs: [OBDCommand]?
     public var obdProtocol: PROTOCOL?
     public var ecuMap: [UInt8: ECUID]?
+    // 30042025
+    public var adapterVersion: String?
 }

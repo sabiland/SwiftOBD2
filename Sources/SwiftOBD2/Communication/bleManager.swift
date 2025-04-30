@@ -40,6 +40,7 @@ class BLEManager: NSObject, CommProtocol {
         CBUUID(string: "FFE0"),
         CBUUID(string: "FFF0"),
         CBUUID(string: "18F0"),  // e.g. VGate iCar Pro
+        CBUUID(string: "0000FFF0-0000-1000-8000-00805F9B34FB"),  // OBDLink CX (fallback)
     ]
 
     let logger = Logger(
@@ -280,27 +281,46 @@ class BLEManager: NSObject, CommProtocol {
         }
 
         for characteristic in characteristics {
+            logger.info(
+                "Characteristic discovered: \(characteristic.uuid.uuidString), properties: \(String(describing: characteristic.properties))"
+            )
+
             if characteristic.properties.contains(.notify) {
                 peripheral.setNotifyValue(true, for: characteristic)
             }
+
             switch characteristic.uuid.uuidString {
-            case "FFE1":  // for servcice FFE0
+            case "FFE1":  // for service FFE0
                 ecuWriteCharacteristic = characteristic
                 ecuReadCharacteristic = characteristic
-            case "FFF1":  // for servcice FFF0
+            case "FFF1":  // for service FFF0
                 ecuReadCharacteristic = characteristic
-            case "FFF2":  // for servcice FFF0
+            case "FFF2":  // for service FFF0
                 ecuWriteCharacteristic = characteristic
-            case "2AF0":  // for servcice 18F0
+            case "2AF0":  // for service 18F0
                 ecuReadCharacteristic = characteristic
-            case "2AF1":  // for servcice 18F0
+            case "2AF1":  // for service 18F0
                 ecuWriteCharacteristic = characteristic
             default:
-                break
+                // Dynamic fallback if UUIDs don't match known ones
+                if ecuWriteCharacteristic == nil,
+                    characteristic.properties.contains(.write)
+                {
+                    ecuWriteCharacteristic = characteristic
+                    logger.info("Assigned write characteristic dynamically")
+                }
+                if ecuReadCharacteristic == nil,
+                    characteristic.properties.contains(.read)
+                        || characteristic.properties.contains(.notify)
+                {
+                    ecuReadCharacteristic = characteristic
+                    logger.info("Assigned read characteristic dynamically")
+                }
             }
         }
 
-        if connectionCompletion != nil, ecuWriteCharacteristic != nil,
+        if connectionCompletion != nil,
+            ecuWriteCharacteristic != nil,
             ecuReadCharacteristic != nil
         {
             connectionCompletion?(peripheral, nil)
