@@ -285,10 +285,6 @@ class BLEManager: NSObject, CommProtocol {
                 "Characteristic discovered: \(characteristic.uuid.uuidString), properties: \(String(describing: characteristic.properties))"
             )
 
-            if characteristic.properties.contains(.notify) {
-                peripheral.setNotifyValue(true, for: characteristic)
-            }
-
             switch characteristic.uuid.uuidString {
             case "FFE1":  // for service FFE0
                 ecuWriteCharacteristic = characteristic
@@ -316,6 +312,19 @@ class BLEManager: NSObject, CommProtocol {
                     ecuReadCharacteristic = characteristic
                     logger.info("Assigned read characteristic dynamically")
                 }
+            }
+
+            /*
+             •    Notifications are only enabled on the correct read characteristic
+             •    Supports OBDLink, Veepeak, VGate, or any fallback device
+             •    Avoids noisy or incorrect notifications
+             */
+            // SABI TWEAK ChatGPT suggestion (AFTER switch block)
+            // ✅ Now that ecuReadCharacteristic may be set, safely enable notify:
+            if characteristic.uuid == ecuReadCharacteristic?.uuid,
+                characteristic.properties.contains(.notify)
+            {
+                peripheral.setNotifyValue(true, for: characteristic)
             }
         }
 
