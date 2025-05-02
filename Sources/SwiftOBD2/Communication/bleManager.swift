@@ -1,3 +1,29 @@
+import Combine
+import CoreBluetooth
+import Foundation
+import OSLog
+
+// MARK: - BLE UUIDs Enum
+enum BLEUUIDs {
+    // Services
+    static let serviceVeepeak = CBUUID(string: "FFE0")
+    static let serviceOBDLinkCX = CBUUID(string: "FFF0")
+    static let serviceVGate = CBUUID(string: "18F0")
+    static let serviceOBDLinkCXFallback = CBUUID(
+        string: "0000FFF0-0000-1000-8000-00805F9B34FB"
+    )
+    static let serviceDeviceInfo = CBUUID(string: "180A")
+
+    // Characteristics
+    static let charVeepeak = CBUUID(string: "FFE1")
+    static let charOBDLinkCXRead = CBUUID(string: "FFF1")
+    static let charOBDLinkCXWrite = CBUUID(string: "FFF2")
+    static let charVGateRead = CBUUID(string: "2AF0")
+    static let charVGateWrite = CBUUID(string: "2AF1")
+    static let charFirmwareRevision = CBUUID(string: "2A26")
+    static let charSoftwareRevision = CBUUID(string: "2A28")
+    static let charManufacturerName = CBUUID(string: "2A29")
+}
 // MARK: - BLEManager Class Documentation
 
 /// The BLEManager class is a wrapper around the CoreBluetooth framework. It is responsible for managing the connection to the OBD2 adapter,
@@ -13,11 +39,6 @@
 /// - Receiving messages from the adapter
 /// - Parsing the received messages
 /// - Handling errors
-
-import Combine
-import CoreBluetooth
-import Foundation
-import OSLog
 
 public enum ConnectionState {
     case disconnected
@@ -37,10 +58,10 @@ class BLEManager: NSObject, CommProtocol {
     }
 
     static let services = [
-        CBUUID(string: "FFE0"),
-        CBUUID(string: "FFF0"),
-        CBUUID(string: "18F0"),  // e.g. VGate iCar Pro
-        CBUUID(string: "0000FFF0-0000-1000-8000-00805F9B34FB"),  // OBDLink CX (fallback)
+        BLEUUIDs.serviceVeepeak,
+        BLEUUIDs.serviceOBDLinkCX,
+        BLEUUIDs.serviceVGate,  // e.g. VGate iCar Pro
+        BLEUUIDs.serviceOBDLinkCXFallback,  // OBDLink CX (fallback)
     ]
 
     let logger = Logger(
@@ -247,20 +268,20 @@ class BLEManager: NSObject, CommProtocol {
     func didDiscoverServices(_ peripheral: CBPeripheral, error _: Error?) {
         for service in peripheral.services ?? [] {
             logger.info("Discovered service: \(service.uuid.uuidString)")
-            switch service {
-            case CBUUID(string: "FFE0"):
+            switch service.uuid {
+            case BLEUUIDs.serviceVeepeak:
                 peripheral.discoverCharacteristics(
-                    [CBUUID(string: "FFE1")],
+                    [BLEUUIDs.charVeepeak],
                     for: service
                 )
-            case CBUUID(string: "FFF0"):
+            case BLEUUIDs.serviceOBDLinkCX:
                 peripheral.discoverCharacteristics(
-                    [CBUUID(string: "FFF1"), CBUUID(string: "FFF2")],
+                    [BLEUUIDs.charOBDLinkCXRead, BLEUUIDs.charOBDLinkCXWrite],
                     for: service
                 )
-            case CBUUID(string: "18F0"):
+            case BLEUUIDs.serviceVGate:
                 peripheral.discoverCharacteristics(
-                    [CBUUID(string: "2AF0"), CBUUID(string: "2AF1")],
+                    [BLEUUIDs.charVGateRead, BLEUUIDs.charVGateWrite],
                     for: service
                 )
             default:
@@ -286,16 +307,16 @@ class BLEManager: NSObject, CommProtocol {
             )
 
             switch characteristic.uuid.uuidString {
-            case "FFE1":  // for service FFE0
+            case BLEUUIDs.charVeepeak.uuidString:  // for service FFE0
                 ecuWriteCharacteristic = characteristic
                 ecuReadCharacteristic = characteristic
-            case "FFF1":  // for service FFF0
+            case BLEUUIDs.charOBDLinkCXRead.uuidString:  // for service FFF0
                 ecuReadCharacteristic = characteristic
-            case "FFF2":  // for service FFF0
+            case BLEUUIDs.charOBDLinkCXWrite.uuidString:  // for service FFF0
                 ecuWriteCharacteristic = characteristic
-            case "2AF0":  // for service 18F0
+            case BLEUUIDs.charVGateRead.uuidString:  // for service 18F0
                 ecuReadCharacteristic = characteristic
-            case "2AF1":  // for service 18F0
+            case BLEUUIDs.charVGateWrite.uuidString:  // for service 18F0
                 ecuWriteCharacteristic = characteristic
             default:
                 // Dynamic fallback if UUIDs don't match known ones
